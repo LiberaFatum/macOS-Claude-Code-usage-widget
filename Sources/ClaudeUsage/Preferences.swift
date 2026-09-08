@@ -39,6 +39,12 @@ enum Preferences {
         set { defaults.set(newValue, forKey: "showIcon") }
     }
 
+    /// Číst limity rovnou z /api/oauth/usage. Vyžaduje přístup k tokenu v Keychainu.
+    static var liveAPI: Bool {
+        get { defaults.object(forKey: "liveAPI") as? Bool ?? false }
+        set { defaults.set(newValue, forKey: "liveAPI") }
+    }
+
     static var chartDays: Int {
         get {
             let stored = defaults.integer(forKey: "chartDays")

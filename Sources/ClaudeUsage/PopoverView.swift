@@ -3,8 +3,9 @@ import SwiftUI
 struct UsageContentView: View {
     let usage: UsageSnapshot?
     let stats: StatsSnapshot?
+    var apiNote: String?
 
-    private let width: CGFloat = 340
+    private let width: CGFloat = 380
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -19,6 +20,13 @@ struct UsageContentView: View {
             } else {
                 note("V ~/.claude.json zatím nejsou data o limitech.",
                      "Spusť jednou Claude Code, uloží si je do cache.")
+            }
+
+            if let apiNote {
+                Text(apiNote)
+                    .font(Fmt.mono(9))
+                    .foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
             Divider().opacity(0.4)
@@ -46,12 +54,13 @@ struct UsageContentView: View {
         HStack(spacing: 6) {
             MascotBadge(cell: 1.2)
             Text("Spotřeba Claude Code")
-                .font(Fmt.mono(12, weight: .semibold))
+                .font(Fmt.mono(13, weight: .semibold))
+                .fixedSize()
             Spacer()
             if let usage {
-                Text(Fmt.ago(usage.fetchedAt))
-                    .font(Fmt.mono(9))
-                    .foregroundStyle(usage.age > 15 * 60 ? Color.orange : Color.secondary)
+                Text(usage.freshnessLabel)
+                    .font(Fmt.mono(10))
+                    .foregroundStyle(usage.isStale ? Color.orange : Color.secondary)
                     .help("Údaje o limitech pocházejí z cache, kterou obnovuje sám Claude Code (zhruba jednou za 5 minut).")
             }
         }
@@ -59,8 +68,8 @@ struct UsageContentView: View {
 
     private func note(_ text: String, _ detail: String) -> some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(text).font(Fmt.mono(10, weight: .semibold))
-            Text(detail).font(Fmt.mono(9)).foregroundStyle(.secondary)
+            Text(text).font(Fmt.mono(11, weight: .semibold))
+            Text(detail).font(Fmt.mono(10)).foregroundStyle(.secondary)
         }
         .fixedSize(horizontal: false, vertical: true)
     }
@@ -79,10 +88,10 @@ struct UsageContentView: View {
         VStack(alignment: .leading, spacing: 5) {
             HStack {
                 Text("Kdyby to šlo přes API")
-                    .font(Fmt.mono(10, weight: .semibold))
+                    .font(Fmt.mono(12, weight: .semibold))
                 Spacer()
                 Text("ceník Claude API")
-                    .font(Fmt.mono(8))
+                    .font(Fmt.mono(9))
                     .foregroundStyle(.tertiary)
             }
             HStack(spacing: 0) {
@@ -92,10 +101,6 @@ struct UsageContentView: View {
                 Divider().frame(height: 26).opacity(0.35)
                 TotalCell(caption: "celkem", value: Fmt.money(stats.allTimeCost), tint: .orange)
             }
-            Text("Celkem je přesné, 7 a 30 dní odhad z poměru typů tokenů.")
-                .font(Fmt.mono(8))
-                .foregroundStyle(.tertiary)
-                .fixedSize(horizontal: false, vertical: true)
         }
     }
 
@@ -113,7 +118,7 @@ struct UsageContentView: View {
                           value: "\(Fmt.modelName(top.model)) · \(Fmt.tokens(top.tokens))")
             }
             Text("Statistiky spočtené \(stats.lastComputed)")
-                .font(Fmt.mono(8))
+                .font(Fmt.mono(9))
                 .foregroundStyle(.tertiary)
                 .padding(.top, 1)
         }
@@ -146,10 +151,10 @@ private struct TotalCell: View {
     var body: some View {
         VStack(spacing: 1) {
             Text(value)
-                .font(Fmt.mono(13, weight: .semibold))
+                .font(Fmt.mono(15, weight: .semibold))
                 .foregroundStyle(tint)
             Text(caption)
-                .font(Fmt.mono(9))
+                .font(Fmt.mono(10))
                 .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity)
@@ -162,9 +167,9 @@ private struct DetailRow: View {
 
     var body: some View {
         HStack(spacing: 5) {
-            Text(label).font(Fmt.mono(9)).foregroundStyle(.secondary)
+            Text(label).font(Fmt.mono(10)).foregroundStyle(.secondary)
             Spacer(minLength: 6)
-            Text(value).font(Fmt.mono(9))
+            Text(value).font(Fmt.mono(10))
         }
     }
 }
@@ -176,17 +181,17 @@ struct LimitRow: View {
         VStack(alignment: .leading, spacing: 3) {
             HStack(spacing: 5) {
                 Text(limit.title)
-                    .font(Fmt.mono(10, weight: limit.isActive ? .semibold : .regular))
+                    .font(Fmt.mono(12, weight: limit.isActive ? .semibold : .regular))
                 Spacer(minLength: 6)
                 Text("\(Int(limit.percent.rounded())) %")
-                    .font(Fmt.mono(10, weight: .semibold))
+                    .font(Fmt.mono(12, weight: .semibold))
                     .foregroundStyle(Fmt.color(forPercent: limit.percent))
             }
             ProgressBar(percent: limit.percent)
             HStack {
                 Spacer()
                 Text("reset za \(Fmt.countdown(to: limit.resetsAt))")
-                    .font(Fmt.mono(8))
+                    .font(Fmt.mono(10))
                     .foregroundStyle(.tertiary)
             }
         }
@@ -260,12 +265,12 @@ struct TokenChart: View {
             HStack(spacing: 4) {
                 Circle().fill(Color(nsColor: Mascot.color)).frame(width: 6, height: 6)
                 Text("tokeny za den · \(points.count) dní")
-                    .font(Fmt.mono(8))
+                    .font(Fmt.mono(10))
                     .foregroundStyle(.secondary)
                 Spacer()
                 if let peak = points.map(\.tokens).max() {
                     Text("max \(Fmt.tokens(peak))")
-                        .font(Fmt.mono(8))
+                        .font(Fmt.mono(10))
                         .foregroundStyle(.tertiary)
                 }
             }

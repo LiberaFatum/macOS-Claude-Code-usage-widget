@@ -55,6 +55,15 @@ enum Fmt {
         return "před \(seconds / 86400) dny"
     }
 
+    /// Kompaktní tvar do hlavičky: "teď" / "6 min" / "3 h" / "2 dny"
+    static func agoShort(_ date: Date) -> String {
+        let seconds = Int(Date().timeIntervalSince(date))
+        if seconds < 60 { return "teď" }
+        if seconds < 3600 { return "\(seconds / 60) min" }
+        if seconds < 86400 { return "\(seconds / 3600) h" }
+        return "\(seconds / 86400) dny"
+    }
+
     static func color(forPercent percent: Double) -> Color {
         switch percent {
         case ..<50: return .green

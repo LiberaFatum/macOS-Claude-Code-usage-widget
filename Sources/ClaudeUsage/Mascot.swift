@@ -21,9 +21,10 @@ enum Mascot {
 
     static var cols: Int { rows[0].count }
 
-    /// Ikona do lišty. `cell` je velikost jedné buňky v bodech; při 1.5 vychází
-    /// na retina displeji přesně 3 fyzické pixely, takže hrany zůstanou ostré.
-    static func statusBarImage(cell: CGFloat = 1.5, color: NSColor = color) -> NSImage {
+    /// Ikona do lišty. `cell` je velikost jedné buňky v bodech; při 1.0 vychází
+    /// na retina displeji přesně 2 fyzické pixely, takže hrany zůstanou ostré.
+    /// Šablona se obarví systémem, takže je bílá v tmavé liště a černá ve světlé.
+    static func statusBarImage(cell: CGFloat = 1.0, color: NSColor = .black) -> NSImage {
         let size = NSSize(width: cell * CGFloat(cols), height: cell * CGFloat(rows.count))
         let image = NSImage(size: size, flipped: true) { _ in
             color.setFill()
@@ -39,7 +40,7 @@ enum Mascot {
             }
             return true
         }
-        image.isTemplate = false
+        image.isTemplate = true
         return image
     }
 }

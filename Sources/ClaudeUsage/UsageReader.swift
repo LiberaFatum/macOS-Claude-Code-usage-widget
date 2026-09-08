@@ -1,14 +1,14 @@
 import Foundation
 
-/// One rate-limit bucket as reported by Claude Code in `~/.claude.json`.
+/// Jeden limitní koš tak, jak ho hlásí Claude Code.
 struct LimitEntry: Identifiable {
     let id = UUID()
     let kind: String        // "session" | "weekly_all" | "weekly_scoped" | ...
     let group: String       // "session" | "weekly"
     let percent: Double     // 0...100
-    let severity: String    // "normal" | "warning" | ...
+    let severity: String
     let resetsAt: Date?
-    let scopeLabel: String? // e.g. "Opus" for weekly_scoped
+    let scopeLabel: String? // např. "Opus" u weekly_scoped
     let isActive: Bool
 
     var title: String {
@@ -22,15 +22,25 @@ struct LimitEntry: Identifiable {
 }
 
 struct UsageSnapshot {
+    enum Source {
+        case api    // živě z /api/oauth/usage
+        case cache  // z ~/.claude.json, obnovuje ho Claude Code
+    }
+
     let fetchedAt: Date
     let limits: [LimitEntry]
+    let source: Source
 
     var session: LimitEntry? { limits.first { $0.kind == "session" } }
     var weeklyAll: LimitEntry? { limits.first { $0.kind == "weekly_all" } }
     var weeklyScoped: [LimitEntry] { limits.filter { $0.kind == "weekly_scoped" } }
 
-    /// How stale the cached numbers are. Claude Code only refreshes them while it runs.
     var age: TimeInterval { Date().timeIntervalSince(fetchedAt) }
+    var isStale: Bool { source == .cache && age > 15 * 60 }
+
+    var freshnessLabel: String {
+        source == .api ? "živě · \(Fmt.agoShort(fetchedAt))" : "cache · \(Fmt.agoShort(fetchedAt))"
+    }
 }
 
 enum UsageReader {
@@ -44,15 +54,23 @@ enum UsageReader {
               let cached = root["cachedUsageUtilization"] as? [String: Any] else { return nil }
 
         let fetchedMs = cached["fetchedAtMs"] as? Double ?? 0
-        let fetchedAt = Date(timeIntervalSince1970: fetchedMs / 1000)
         let util = cached["utilization"] as? [String: Any] ?? [:]
 
+        return UsageSnapshot(
+            fetchedAt: Date(timeIntervalSince1970: fetchedMs / 1000),
+            limits: limits(from: util),
+            source: .cache
+        )
+    }
+
+    /// Vytáhne limity z objektu `utilization`, ať přijde z API nebo ze souboru.
+    static func limits(from util: [String: Any]) -> [LimitEntry] {
         var entries: [LimitEntry] = []
 
         if let raw = util["limits"] as? [[String: Any]] {
             for item in raw {
                 guard let kind = item["kind"] as? String,
-                      let percent = item["percent"] as? Double else { continue }
+                      let percent = number(item["percent"]) else { continue }
                 var scopeLabel: String?
                 if let scope = item["scope"] as? [String: Any],
                    let model = scope["model"] as? [String: Any] {
@@ -70,23 +88,29 @@ enum UsageReader {
             }
         }
 
-        // Older Claude Code builds only expose the five_hour / seven_day objects.
+        // Starší tvar odpovědi nese jen five_hour / seven_day.
         if entries.isEmpty {
             if let e = legacy(util["five_hour"], kind: "session", group: "session") { entries.append(e) }
             if let e = legacy(util["seven_day"], kind: "weekly_all", group: "weekly") { entries.append(e) }
         }
 
-        return UsageSnapshot(fetchedAt: fetchedAt, limits: entries)
+        return entries
     }
 
     private static func legacy(_ any: Any?, kind: String, group: String) -> LimitEntry? {
         guard let dict = any as? [String: Any],
-              let percent = dict["utilization"] as? Double else { return nil }
+              let percent = number(dict["utilization"]) else { return nil }
         return LimitEntry(
             kind: kind, group: group, percent: percent, severity: "normal",
             resetsAt: parseDate(dict["resets_at"] as? String),
             scopeLabel: nil, isActive: false
         )
+    }
+
+    private static func number(_ any: Any?) -> Double? {
+        if let d = any as? Double { return d }
+        if let i = any as? Int { return Double(i) }
+        return nil
     }
 
     private static func parseDate(_ string: String?) -> Date? {

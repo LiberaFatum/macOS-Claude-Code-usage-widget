@@ -11,6 +11,25 @@ case "--disable-login-item":
     LaunchAtLogin.set(false)
     print("Spouštění po přihlášení vypnuto.")
     exit(0)
+case "--test-api":
+    // Ověří živé čtení limitů. Poprvé vyskočí dialog Keychainu, potvrď ho.
+    let done = DispatchSemaphore(value: 0)
+    var code: Int32 = 1
+    UsageAPI.fetch { result in
+        switch result {
+        case .success(let snapshot):
+            print("OK, limity z API:")
+            for limit in snapshot.limits {
+                print("  \(limit.title): \(Int(limit.percent.rounded())) %")
+            }
+            code = 0
+        case .failure(let error):
+            print("Selhalo: \(error)")
+        }
+        done.signal()
+    }
+    done.wait()
+    exit(code)
 case "--render-preview":
     let path = CommandLine.arguments.dropFirst(2).first ?? "preview.png"
     MainActor.assumeIsolated { Preview.render(to: path) }
@@ -26,6 +45,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var usage: UsageSnapshot?
     private var stats: StatsSnapshot?
     private var seenModificationDates: [String: Date] = [:]
+    private var apiNote: String?
+    private var apiInFlight = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // launchd i ruční spuštění mohou nastat současně, druhá kopie by přidala
@@ -54,9 +75,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     // MARK: - Data
 
     private func refresh() {
-        usage = UsageReader.read()
+        let cached = UsageReader.read()
+        // Živá data přebijí cache; než dorazí, ukazuje se poslední známý stav.
+        if usage == nil || usage?.source == .cache {
+            usage = cached
+        } else if let cached, let current = usage, cached.fetchedAt > current.fetchedAt {
+            usage = cached
+        }
         stats = StatsReader.read()
         updateStatusTitle()
+        if Preferences.liveAPI { fetchLive() }
+    }
+
+    private func fetchLive() {
+        guard !apiInFlight else { return }
+        apiInFlight = true
+        UsageAPI.fetch { [weak self] result in
+            DispatchQueue.main.async {
+                guard let self else { return }
+                self.apiInFlight = false
+                switch result {
+                case .success(let snapshot):
+                    self.usage = snapshot
+                    self.apiNote = nil
+                case .failure(let error):
+                    self.apiNote = "Živé čtení selhalo (\(error)), používá se cache."
+                }
+                self.updateStatusTitle()
+            }
+        }
     }
 
     private func restartTimer() {
@@ -96,22 +143,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         var text: String
         var tint: Double?
 
+        func label(_ percent: Double?, _ suffix: String) -> String {
+            percent.map { "\(Int($0.rounded())) % \(suffix)" } ?? "? \(suffix)"
+        }
+
         switch Preferences.menuBarMode {
         case .session:
-            text = session.map { "\(Int($0.rounded())) %" } ?? "?"
+            text = label(session, "s")
             tint = session
         case .weekly:
-            text = weekly.map { "\(Int($0.rounded())) %" } ?? "?"
+            text = label(weekly, "w")
             tint = weekly
         case .both:
-            let s = session.map { "\(Int($0.rounded()))" } ?? "?"
-            let w = weekly.map { "\(Int($0.rounded()))" } ?? "?"
-            text = "\(s) · \(w) %"
+            text = "\(label(session, "s")) | \(label(weekly, "w"))"
             tint = [session, weekly].compactMap { $0 }.max()
         case .highest:
-            let highest = [session, weekly].compactMap { $0 }.max()
-            text = highest.map { "\(Int($0.rounded())) %" } ?? "?"
-            tint = highest
+            if let s = session, let w = weekly {
+                text = s >= w ? label(s, "s") : label(w, "w")
+                tint = max(s, w)
+            } else if let s = session {
+                text = label(s, "s"); tint = s
+            } else {
+                text = label(weekly, "w"); tint = weekly
+            }
         }
 
         // Pod 80 % zůstává text v běžné barvě lišty, výš už má smysl upozornit.
@@ -133,7 +187,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         var lines = usage.limits.map {
             "\($0.title): \(Int($0.percent.rounded())) % (reset za \(Fmt.countdown(to: $0.resetsAt)))"
         }
-        lines.append("Aktualizováno \(Fmt.ago(usage.fetchedAt))")
+        lines.append("Aktualizováno \(usage.freshnessLabel)")
         return lines.joined(separator: "\n")
     }
 
@@ -144,7 +198,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.delegate = self
 
         let content = NSMenuItem()
-        let hosting = NSHostingView(rootView: UsageContentView(usage: usage, stats: stats))
+        let hosting = NSHostingView(rootView: UsageContentView(usage: usage, stats: stats, apiNote: apiNote))
         hosting.frame.size = hosting.fittingSize
         content.view = hosting
         menu.addItem(content)
@@ -204,6 +258,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         icon.state = Preferences.showIcon ? .on : .off
         submenu.addItem(icon)
 
+        let live = NSMenuItem(title: "Číst limity živě z API", action: #selector(toggleLiveAPI), keyEquivalent: "")
+        live.target = self
+        live.state = Preferences.liveAPI ? .on : .off
+        live.toolTip = "Volá stejný endpoint jako Claude Code. Vyžaduje jednorázové povolení přístupu k tokenu v Keychainu."
+        submenu.addItem(live)
+
         let login = NSMenuItem(title: "Spouštět po přihlášení", action: #selector(toggleLoginItem), keyEquivalent: "")
         login.target = self
         login.state = LaunchAtLogin.isEnabled ? .on : .off
@@ -254,6 +314,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc private func toggleIcon() {
         Preferences.showIcon.toggle()
         updateStatusTitle()
+        rebuildMenu()
+    }
+
+    @objc private func toggleLiveAPI() {
+        Preferences.liveAPI.toggle()
+        apiNote = nil
+        if Preferences.liveAPI { fetchLive() }
         rebuildMenu()
     }
 
