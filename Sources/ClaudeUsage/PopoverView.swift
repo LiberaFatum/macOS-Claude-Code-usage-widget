@@ -53,15 +53,17 @@ struct UsageContentView: View {
     private var header: some View {
         HStack(spacing: 6) {
             MascotBadge(cell: 1.2)
-            Text("Spotřeba Claude Code")
+            Text("Claude Code")
                 .font(Fmt.mono(13, weight: .semibold))
                 .fixedSize()
             Spacer()
             if let usage {
                 Text(usage.freshnessLabel)
-                    .font(Fmt.mono(10))
+                    .font(Fmt.mono(9))
+                    .lineLimit(1)
+                    .fixedSize()
                     .foregroundStyle(usage.isStale ? Color.orange : Color.secondary)
-                    .help("Údaje o limitech pocházejí z cache, kterou obnovuje sám Claude Code (zhruba jednou za 5 minut).")
+                    .help("Zdroj: \(usage.sourceLabel)")
             }
         }
     }

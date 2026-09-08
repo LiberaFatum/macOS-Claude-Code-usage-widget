@@ -39,7 +39,11 @@ struct UsageSnapshot {
     var isStale: Bool { source == .cache && age > 15 * 60 }
 
     var freshnessLabel: String {
-        (source == .api ? "živě · " : "cache · ") + Fmt.elapsed(since: fetchedAt)
+        "aktualizováno před " + Fmt.elapsed(since: fetchedAt)
+    }
+
+    var sourceLabel: String {
+        source == .api ? "živě z API" : "z cache, kterou píše Claude Code"
     }
 }
 
