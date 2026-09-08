@@ -8,10 +8,10 @@ enum MenuBarMode: String, CaseIterable {
 
     var label: String {
         switch self {
-        case .session: return "Session (5h)"
+        case .session: return "Session (5 h)"
         case .weekly: return "Weekly"
         case .both: return "Session + Weekly"
-        case .highest: return "Highest of the two"
+        case .highest: return "Vyšší z obou"
         }
     }
 }

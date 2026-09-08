@@ -13,7 +13,7 @@ struct LimitEntry: Identifiable {
 
     var title: String {
         switch kind {
-        case "session": return "Session (5h)"
+        case "session": return "Session (5 h)"
         case "weekly_all": return "Weekly"
         case "weekly_scoped": return "Weekly · \(scopeLabel ?? "scoped")"
         default: return scopeLabel ?? kind.replacingOccurrences(of: "_", with: " ").capitalized

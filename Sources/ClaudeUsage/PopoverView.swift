@@ -3,7 +3,6 @@ import SwiftUI
 struct UsageContentView: View {
     let usage: UsageSnapshot?
     let stats: StatsSnapshot?
-    var onOpenStatsFolder: () -> Void = {}
 
     private let width: CGFloat = 340
 
@@ -17,14 +16,9 @@ struct UsageContentView: View {
                         LimitRow(limit: limit)
                     }
                 }
-                if usage.age > 15 * 60 {
-                    staleNote(usage: usage)
-                }
             } else {
-                missingNote(
-                    text: "No usage data in ~/.claude.json yet.",
-                    detail: "Start a Claude Code session once — it caches the limits on launch."
-                )
+                note("V ~/.claude.json zatím nejsou data o limitech.",
+                     "Spusť jednou Claude Code, uloží si je do cache.")
             }
 
             Divider().opacity(0.4)
@@ -35,12 +29,12 @@ struct UsageContentView: View {
 
                 tokenTotals(stats)
                 Divider().opacity(0.4)
-                footer(stats)
+                costSection(stats)
+                Divider().opacity(0.4)
+                details(stats)
             } else {
-                missingNote(
-                    text: "No token stats found.",
-                    detail: "~/.claude/stats-cache.json is written by Claude Code itself."
-                )
+                note("Statistiky tokenů nenalezeny.",
+                     "Soubor ~/.claude/stats-cache.json zapisuje sám Claude Code.")
             }
         }
         .padding(.horizontal, 14)
@@ -50,100 +44,127 @@ struct UsageContentView: View {
 
     private var header: some View {
         HStack(spacing: 6) {
-            Image(systemName: "gauge.with.dots.needle.33percent")
-                .foregroundStyle(.secondary)
-            Text("Claude Code Usage")
-                .font(.system(size: 13, weight: .semibold))
+            MascotBadge(cell: 1.2)
+            Text("Spotřeba Claude Code")
+                .font(Fmt.mono(12, weight: .semibold))
             Spacer()
             if let usage {
                 Text(Fmt.ago(usage.fetchedAt))
-                    .font(.system(size: 10))
-                    .foregroundStyle(.tertiary)
+                    .font(Fmt.mono(9))
+                    .foregroundStyle(usage.age > 15 * 60 ? Color.orange : Color.secondary)
+                    .help("Údaje o limitech pocházejí z cache, kterou obnovuje sám Claude Code (zhruba jednou za 5 minut).")
             }
         }
     }
 
-    private func staleNote(usage: UsageSnapshot) -> some View {
-        Label(
-            "Limits are a cache — last refreshed \(Fmt.ago(usage.fetchedAt)). Run Claude Code to update.",
-            systemImage: "exclamationmark.triangle"
-        )
-        .font(.system(size: 10))
-        .foregroundStyle(.orange)
-        .fixedSize(horizontal: false, vertical: true)
-    }
-
-    private func missingNote(text: String, detail: String) -> some View {
+    private func note(_ text: String, _ detail: String) -> some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(text).font(.system(size: 11, weight: .medium))
-            Text(detail).font(.system(size: 10)).foregroundStyle(.secondary)
+            Text(text).font(Fmt.mono(10, weight: .semibold))
+            Text(detail).font(Fmt.mono(9)).foregroundStyle(.secondary)
         }
         .fixedSize(horizontal: false, vertical: true)
     }
 
     private func tokenTotals(_ stats: StatsSnapshot) -> some View {
         HStack(spacing: 0) {
-            TotalCell(caption: "7 days", value: stats.tokens(lastDays: 7))
+            TotalCell(caption: "7 dní", value: Fmt.tokens(stats.tokens(lastDays: 7)))
             Divider().frame(height: 26).opacity(0.35)
-            TotalCell(caption: "30 days", value: stats.tokens(lastDays: 30))
+            TotalCell(caption: "30 dní", value: Fmt.tokens(stats.tokens(lastDays: 30)))
             Divider().frame(height: 26).opacity(0.35)
-            TotalCell(caption: "All time", value: stats.allTimeTokens)
+            TotalCell(caption: "celkem", value: Fmt.tokens(stats.allTimeTokens))
         }
     }
 
-    private func footer(_ stats: StatsSnapshot) -> some View {
+    private func costSection(_ stats: StatsSnapshot) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            HStack {
+                Text("Kdyby to šlo přes API")
+                    .font(Fmt.mono(10, weight: .semibold))
+                Spacer()
+                Text("ceník Claude API")
+                    .font(Fmt.mono(8))
+                    .foregroundStyle(.tertiary)
+            }
+            HStack(spacing: 0) {
+                TotalCell(caption: "7 dní", value: Fmt.money(stats.estimatedCost(lastDays: 7)), tint: .orange)
+                Divider().frame(height: 26).opacity(0.35)
+                TotalCell(caption: "30 dní", value: Fmt.money(stats.estimatedCost(lastDays: 30)), tint: .orange)
+                Divider().frame(height: 26).opacity(0.35)
+                TotalCell(caption: "celkem", value: Fmt.money(stats.allTimeCost), tint: .orange)
+            }
+            Text("Celkem je přesné, 7 a 30 dní odhad z poměru typů tokenů.")
+                .font(Fmt.mono(8))
+                .foregroundStyle(.tertiary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private func details(_ stats: StatsSnapshot) -> some View {
         let totals = stats.allTimeTotals
         return VStack(alignment: .leading, spacing: 3) {
-            FooterRow(icon: "arrow.down.circle", label: "Input / Output",
+            DetailRow(label: "Input / output",
                       value: "\(Fmt.tokens(totals.input)) / \(Fmt.tokens(totals.output))")
-            FooterRow(icon: "externaldrive", label: "Cache read / write",
+            DetailRow(label: "Cache read / write",
                       value: "\(Fmt.tokens(totals.cacheRead)) / \(Fmt.tokens(totals.cacheCreation))")
-            FooterRow(icon: "bubble.left.and.bubble.right", label: "Sessions / messages",
+            DetailRow(label: "Sessions / zprávy",
                       value: "\(Fmt.grouped(stats.totalSessions)) / \(Fmt.grouped(stats.totalMessages))")
             if let top = stats.modelBreakdown(lastDays: 7).first {
-                FooterRow(icon: "cpu", label: "Top model (7d)",
+                DetailRow(label: "Nejvíc za 7 dní",
                           value: "\(Fmt.modelName(top.model)) · \(Fmt.tokens(top.tokens))")
             }
-            Text("Stats computed \(stats.lastComputed)")
-                .font(.system(size: 9))
+            Text("Statistiky spočtené \(stats.lastComputed)")
+                .font(Fmt.mono(8))
                 .foregroundStyle(.tertiary)
                 .padding(.top, 1)
         }
     }
 }
 
-private struct TotalCell: View {
-    let caption: String
-    let value: Int
+/// Maskot vykreslený jako pixelová mřížka, aby seděl i uvnitř SwiftUI panelu.
+struct MascotBadge: View {
+    var cell: CGFloat = 1.2
 
     var body: some View {
-        VStack(spacing: 1) {
-            Text(Fmt.tokens(value))
-                .font(.system(size: 14, weight: .semibold, design: .rounded))
-                .monospacedDigit()
-            Text(caption)
-                .font(.system(size: 9))
-                .foregroundStyle(.secondary)
+        Canvas { context, _ in
+            let color = Color(nsColor: Mascot.color)
+            for (r, row) in Mascot.rows.enumerated() {
+                for (c, char) in row.enumerated() where char == "#" {
+                    let rect = CGRect(x: CGFloat(c) * cell, y: CGFloat(r) * cell, width: cell, height: cell)
+                    context.fill(Path(rect), with: .color(color))
+                }
+            }
         }
-        .frame(maxWidth: .infinity)
-        .help("\(Fmt.grouped(value)) tokens")
+        .frame(width: cell * CGFloat(Mascot.cols), height: cell * CGFloat(Mascot.rows.count))
     }
 }
 
-private struct FooterRow: View {
-    let icon: String
+private struct TotalCell: View {
+    let caption: String
+    let value: String
+    var tint: Color = .primary
+
+    var body: some View {
+        VStack(spacing: 1) {
+            Text(value)
+                .font(Fmt.mono(13, weight: .semibold))
+                .foregroundStyle(tint)
+            Text(caption)
+                .font(Fmt.mono(9))
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity)
+    }
+}
+
+private struct DetailRow: View {
     let label: String
     let value: String
 
     var body: some View {
         HStack(spacing: 5) {
-            Image(systemName: icon)
-                .font(.system(size: 9))
-                .foregroundStyle(.tertiary)
-                .frame(width: 12)
-            Text(label).font(.system(size: 10)).foregroundStyle(.secondary)
+            Text(label).font(Fmt.mono(9)).foregroundStyle(.secondary)
             Spacer(minLength: 6)
-            Text(value).font(.system(size: 10)).monospacedDigit()
+            Text(value).font(Fmt.mono(9))
         }
     }
 }
@@ -154,23 +175,18 @@ struct LimitRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
             HStack(spacing: 5) {
-                Image(systemName: limit.group == "session" ? "timer" : "calendar")
-                    .font(.system(size: 10))
-                    .foregroundStyle(.secondary)
-                    .frame(width: 13)
                 Text(limit.title)
-                    .font(.system(size: 11, weight: limit.isActive ? .semibold : .regular))
+                    .font(Fmt.mono(10, weight: limit.isActive ? .semibold : .regular))
                 Spacer(minLength: 6)
-                Text("\(Int(limit.percent.rounded()))%")
-                    .font(.system(size: 11, weight: .semibold))
-                    .monospacedDigit()
+                Text("\(Int(limit.percent.rounded())) %")
+                    .font(Fmt.mono(10, weight: .semibold))
                     .foregroundStyle(Fmt.color(forPercent: limit.percent))
             }
             ProgressBar(percent: limit.percent)
             HStack {
                 Spacer()
-                Text("resets in \(Fmt.countdown(to: limit.resetsAt))")
-                    .font(.system(size: 9))
+                Text("reset za \(Fmt.countdown(to: limit.resetsAt))")
+                    .font(Fmt.mono(8))
                     .foregroundStyle(.tertiary)
             }
         }
@@ -193,7 +209,7 @@ struct ProgressBar: View {
     }
 }
 
-/// Sparkline of daily token totals, styled after the graph in Hot.app's menu.
+/// Denní spotřeba tokenů jako sparkline.
 struct TokenChart: View {
     let points: [DailyPoint]
 
@@ -201,9 +217,8 @@ struct TokenChart: View {
         VStack(alignment: .leading, spacing: 4) {
             Canvas { context, size in
                 let gridColor = Color.primary.opacity(0.10)
-                let rows = 5
-                for i in 0...rows {
-                    let y = size.height * CGFloat(i) / CGFloat(rows)
+                for i in 0...5 {
+                    let y = size.height * CGFloat(i) / 5
                     var line = Path()
                     line.move(to: CGPoint(x: 0, y: y))
                     line.addLine(to: CGPoint(x: size.width, y: y))
@@ -227,12 +242,13 @@ struct TokenChart: View {
                 fill.addLine(to: CGPoint(x: 0, y: size.height))
                 fill.closeSubpath()
 
+                let mascot = Color(nsColor: Mascot.color)
                 context.fill(fill, with: .linearGradient(
-                    Gradient(colors: [Color.orange.opacity(0.28), Color.orange.opacity(0.02)]),
+                    Gradient(colors: [mascot.opacity(0.30), mascot.opacity(0.02)]),
                     startPoint: .zero,
                     endPoint: CGPoint(x: 0, y: size.height)
                 ))
-                context.stroke(line, with: .color(.orange), lineWidth: 1.4)
+                context.stroke(line, with: .color(mascot), lineWidth: 1.4)
             }
             .padding(6)
             .background(
@@ -242,14 +258,14 @@ struct TokenChart: View {
             )
 
             HStack(spacing: 4) {
-                Circle().fill(Color.orange).frame(width: 6, height: 6)
-                Text("Tokens / day · last \(points.count) d")
-                    .font(.system(size: 9))
+                Circle().fill(Color(nsColor: Mascot.color)).frame(width: 6, height: 6)
+                Text("tokeny za den · \(points.count) dní")
+                    .font(Fmt.mono(8))
                     .foregroundStyle(.secondary)
                 Spacer()
                 if let peak = points.map(\.tokens).max() {
-                    Text("peak \(Fmt.tokens(peak))")
-                        .font(.system(size: 9))
+                    Text("max \(Fmt.tokens(peak))")
+                        .font(Fmt.mono(8))
                         .foregroundStyle(.tertiary)
                 }
             }

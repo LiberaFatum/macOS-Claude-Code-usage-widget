@@ -1,5 +1,5 @@
 #!/bin/bash
-# Removes the app, its login item and its preferences.
+# Odstraní aplikaci, login item i uložené předvolby.
 set -euo pipefail
 
 APP_NAME="Claude Usage"
@@ -11,4 +11,4 @@ rm -f "$HOME/Library/LaunchAgents/$LABEL.plist"
 rm -rf "/Applications/$APP_NAME.app"
 defaults delete "$LABEL" 2>/dev/null || true
 
-echo "Removed $APP_NAME."
+echo "$APP_NAME odstraněna."

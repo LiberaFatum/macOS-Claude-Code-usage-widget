@@ -1,5 +1,5 @@
 #!/bin/bash
-# Builds "Claude Usage.app" into ./build. No Xcode required — Command Line Tools are enough.
+# Sestaví "Claude Usage.app" do ./build. Xcode není potřeba, stačí Command Line Tools.
 set -euo pipefail
 
 cd "$(dirname "$0")"
@@ -10,22 +10,23 @@ VERSION="1.0.0"
 BUILD_DIR="build"
 APP="$BUILD_DIR/$APP_NAME.app"
 
-echo "==> Compiling (release)"
+echo "==> Překlad (release)"
 swift build -c release
 
-echo "==> Assembling bundle"
+echo "==> Sestavení bundlu"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp ".build/release/ClaudeUsage" "$APP/Contents/MacOS/ClaudeUsage"
 
-echo "==> Rendering icon"
+echo "==> Vykreslení ikony"
 ICONSET="$BUILD_DIR/AppIcon.iconset"
 rm -rf "$ICONSET"
-if swift Tools/make-icon.swift "$ICONSET" >/dev/null 2>&1; then
-    iconutil -c icns "$ICONSET" -o "$APP/Contents/Resources/AppIcon.icns" || echo "    (icns conversion skipped)"
-    rm -rf "$ICONSET"
+if swiftc -O Tools/make-icon.swift Sources/ClaudeUsage/Mascot.swift -o "$BUILD_DIR/mkicon" >/dev/null 2>&1 \
+   && "$BUILD_DIR/mkicon" "$ICONSET" >/dev/null 2>&1; then
+    iconutil -c icns "$ICONSET" -o "$APP/Contents/Resources/AppIcon.icns" || echo "    (převod na icns přeskočen)"
+    rm -rf "$ICONSET" "$BUILD_DIR/mkicon"
 else
-    echo "    (icon rendering skipped)"
+    echo "    (vykreslení ikony přeskočeno)"
 fi
 
 cat > "$APP/Contents/Info.plist" <<PLIST
@@ -50,7 +51,7 @@ PLIST
 
 printf 'APPL????' > "$APP/Contents/PkgInfo"
 
-echo "==> Ad-hoc signing"
-codesign --force --deep --sign - "$APP" 2>/dev/null || echo "    (signing skipped)"
+echo "==> Ad-hoc podpis"
+codesign --force --deep --sign - "$APP" 2>/dev/null || echo "    (podpis přeskočen)"
 
-echo "==> Done: $APP"
+echo "==> Hotovo: $APP"

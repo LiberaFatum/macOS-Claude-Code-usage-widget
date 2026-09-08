@@ -63,6 +63,30 @@ struct StatsSnapshot {
         }
     }
 
+    /// Přesná cena podle API ceníku ze všech evidovaných tokenů (rozpad na typy je známý).
+    var allTimeCost: Double {
+        modelUsage.reduce(0.0) { $0 + (Pricing.cost(of: $1.value, model: $1.key) ?? 0) }
+    }
+
+    /// Kolik z all-time tokenů daného modelu nemá známou cenu (neznámý model v ceníku).
+    var unpricedModels: [String] {
+        modelUsage.keys.filter { Pricing.price(for: $0) == nil }.sorted()
+    }
+
+    /// Odhad ceny za posledních `days` dní.
+    ///
+    /// `dailyModelTokens` drží jen součet tokenů na model a den, bez rozpadu na
+    /// input/output/cache. Rozpad se proto odvodí z all-time poměru téhož modelu.
+    func estimatedCost(lastDays days: Int) -> Double {
+        var total = 0.0
+        for (model, tokens) in modelBreakdown(lastDays: days) {
+            guard let reference = modelUsage[model], reference.total > 0,
+                  let cost = Pricing.cost(of: reference, model: model) else { continue }
+            total += cost * Double(tokens) / Double(reference.total)
+        }
+        return total
+    }
+
     /// Per-model share over the last `days` days, biggest first.
     func modelBreakdown(lastDays days: Int) -> [(model: String, tokens: Int)] {
         let cal = Calendar.current
