@@ -84,6 +84,17 @@ enum Fmt {
         return version.isEmpty ? family.capitalized : "\(family.capitalized) \(version)"
     }
 
+    // Čtyři velikosti pro celý panel, ať se stejné druhy textu nemíchají.
+    /// Velká čísla, jen souhrny.
+    static var big: Font { mono(15, weight: .semibold) }
+    /// Nadpisy sekcí a názvy limitů.
+    static var heading: Font { mono(13, weight: .semibold) }
+    /// Běžný text: popisky, hodnoty, odpočty, legenda grafu.
+    static var body: Font { mono(11) }
+    static var bodyBold: Font { mono(11, weight: .semibold) }
+    /// Poznámky pod čarou.
+    static var meta: Font { mono(9) }
+
     /// Monocraft, s bezpečným ústupem na systémový monospace, když font chybí.
     static func mono(_ size: CGFloat, weight: Font.Weight = .regular) -> Font {
         let face = weight == .regular ? "Monocraft" : "Monocraft-SemiBold"

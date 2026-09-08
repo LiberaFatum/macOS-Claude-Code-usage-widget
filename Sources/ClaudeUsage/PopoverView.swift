@@ -24,7 +24,7 @@ struct UsageContentView: View {
 
             if let apiNote {
                 Text(apiNote)
-                    .font(Fmt.mono(9))
+                    .font(Fmt.meta)
                     .foregroundStyle(.orange)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -54,12 +54,12 @@ struct UsageContentView: View {
         HStack(spacing: 6) {
             MascotBadge(cell: 1.2)
             Text("Claude Code")
-                .font(Fmt.mono(13, weight: .semibold))
+                .font(Fmt.heading)
                 .fixedSize()
             Spacer()
             if let usage {
                 Text(usage.freshnessLabel)
-                    .font(Fmt.mono(9))
+                    .font(Fmt.meta)
                     .lineLimit(1)
                     .fixedSize()
                     .foregroundStyle(usage.isStale ? Color.orange : Color.secondary)
@@ -70,8 +70,8 @@ struct UsageContentView: View {
 
     private func note(_ text: String, _ detail: String) -> some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(text).font(Fmt.mono(11, weight: .semibold))
-            Text(detail).font(Fmt.mono(10)).foregroundStyle(.secondary)
+            Text(text).font(Fmt.bodyBold)
+            Text(detail).font(Fmt.meta).foregroundStyle(.secondary)
         }
         .fixedSize(horizontal: false, vertical: true)
     }
@@ -90,10 +90,10 @@ struct UsageContentView: View {
         VStack(alignment: .leading, spacing: 5) {
             HStack {
                 Text("Kdyby to šlo přes API")
-                    .font(Fmt.mono(12, weight: .semibold))
+                    .font(Fmt.heading)
                 Spacer()
                 Text("ceník Claude API")
-                    .font(Fmt.mono(9))
+                    .font(Fmt.meta)
                     .foregroundStyle(.tertiary)
             }
             HStack(spacing: 0) {
@@ -120,7 +120,7 @@ struct UsageContentView: View {
                           value: "\(Fmt.modelName(top.model)) · \(Fmt.tokens(top.tokens))")
             }
             Text("Statistiky spočtené \(stats.lastComputed)")
-                .font(Fmt.mono(9))
+                .font(Fmt.meta)
                 .foregroundStyle(.tertiary)
                 .padding(.top, 1)
         }
@@ -153,10 +153,10 @@ private struct TotalCell: View {
     var body: some View {
         VStack(spacing: 1) {
             Text(value)
-                .font(Fmt.mono(15, weight: .semibold))
+                .font(Fmt.big)
                 .foregroundStyle(tint)
             Text(caption)
-                .font(Fmt.mono(10))
+                .font(Fmt.body)
                 .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity)
@@ -169,9 +169,9 @@ private struct DetailRow: View {
 
     var body: some View {
         HStack(spacing: 5) {
-            Text(label).font(Fmt.mono(10)).foregroundStyle(.secondary)
+            Text(label).font(Fmt.body).foregroundStyle(.secondary)
             Spacer(minLength: 6)
-            Text(value).font(Fmt.mono(10))
+            Text(value).font(Fmt.body)
         }
     }
 }
@@ -183,17 +183,17 @@ struct LimitRow: View {
         VStack(alignment: .leading, spacing: 3) {
             HStack(spacing: 5) {
                 Text(limit.title)
-                    .font(Fmt.mono(12, weight: limit.isActive ? .semibold : .regular))
+                    .font(Fmt.mono(13, weight: limit.isActive ? .semibold : .regular))
                 Spacer(minLength: 6)
                 Text("\(Int(limit.percent.rounded())) %")
-                    .font(Fmt.mono(12, weight: .semibold))
+                    .font(Fmt.heading)
                     .foregroundStyle(Fmt.color(forPercent: limit.percent))
             }
             ProgressBar(percent: limit.percent)
             HStack {
                 Spacer()
                 Text("reset za \(Fmt.countdown(to: limit.resetsAt))")
-                    .font(Fmt.mono(10))
+                    .font(Fmt.body)
                     .foregroundStyle(.tertiary)
             }
         }
@@ -267,12 +267,12 @@ struct TokenChart: View {
             HStack(spacing: 4) {
                 Circle().fill(Color(nsColor: Mascot.color)).frame(width: 6, height: 6)
                 Text("tokeny za den · \(points.count) dní")
-                    .font(Fmt.mono(10))
+                    .font(Fmt.body)
                     .foregroundStyle(.secondary)
                 Spacer()
                 if let peak = points.map(\.tokens).max() {
                     Text("max \(Fmt.tokens(peak))")
-                        .font(Fmt.mono(10))
+                        .font(Fmt.body)
                         .foregroundStyle(.tertiary)
                 }
             }

@@ -1,8 +1,10 @@
 # Claude Usage
 
-Widget do macOS lišty se spotřebou Claude Code. V liště ukazuje procenta session
-a weekly limitu, po rozkliknutí denní graf, tokeny za 7 / 30 dní i celkem a přepočet
-na cenu Claude API.
+Widget do macOS lišty se spotřebou Claude Code. V liště procenta session a weekly
+limitu, po rozkliknutí denní graf, tokeny za 7 / 30 dní i celkem a přepočet na cenu
+Claude API.
+
+![Lišta](docs/menubar.png)
 
 ![Panel](docs/menu.png)
 
@@ -18,38 +20,46 @@ Přeloží se, nakopíruje do `/Applications/Claude Usage.app` a spustí. Potře
 a Command Line Tools (`xcode-select --install`), Xcode ne. Font [Monocraft](https://github.com/IdreesInc/Monocraft)
 je volitelný, bez něj se použije systémový monospace.
 
-Spouštění po restartu zapneš v menu: **Nastavení > Spouštět po přihlášení**.
+Spouštění po restartu: **Nastavení > Spouštět po přihlášení**. Zapíše LaunchAgent do
+`~/Library/LaunchAgents/com.liberafatum.claude-usage-widget.plist`, žádná binárka navíc.
 
 ## Odkud jsou data
 
-Vše se čte z lokálních souborů, které si píše sám Claude Code. Aplikace nikam nevolá
-a nesahá na klíče ani na Keychain.
-
-| Soubor | Co z něj bere |
+| Zdroj | Co z něj bere |
 | --- | --- |
-| `~/.claude.json`, klíč `cachedUsageUtilization` | procenta session a weekly limitu, časy resetu |
+| `https://api.anthropic.com/api/oauth/usage` | živá procenta limitů, volitelné, viz níže |
+| `~/.claude.json`, klíč `cachedUsageUtilization` | tatáž procenta z cache, když živé čtení neběží |
 | `~/.claude/stats-cache.json` | tokeny po dnech a modelech, celkové součty |
 
-`cachedUsageUtilization` je cache, kterou přepisuje Claude Code při startu a při příkazu
-`/usage`. Widget hlídá čas změny souboru a načte ho hned, jak se přepíše, ale čerstvější
-než cache sám o sobě nebude. Hlavička panelu proto píše zdroj a stáří údaje.
+Statistiky tokenů se čtou vždy jen z lokálního souboru. Soubory se parsují pouze při
+změně jejich času úpravy, takže widget na pozadí prakticky nic nedělá.
+
+`cachedUsageUtilization` přepisuje Claude Code při startu a při příkazu `/usage`, mezitím
+stárne. Proto to živé čtení.
 
 `stats-cache.json` se přepočítává po dnech, graf tak většinou končí včerejškem.
 
 ## Živé čtení limitů
 
-**Nastavení > Číst limity živě z API** obejde cache a zavolá `https://api.anthropic.com/api/oauth/usage`,
-tedy stejný endpoint jako Claude Code. Token se hledá v `~/.claude/.credentials.json` a pak
-v Keychainu, načte se jednou za běh aplikace a drží se jen v paměti. První čtení Keychainu
-vyvolá systémový dialog, potvrď **Vždy povolit**.
+**Nastavení > Číst limity živě z API** volá stejný endpoint jako Claude Code. Token se
+hledá v `~/.claude/.credentials.json` a pak v Keychainu, načte se **jednou za běh
+aplikace** a drží se jen v paměti, znovu se sáhne dolů až po HTTP 401 nebo 403. První
+čtení Keychainu vyvolá systémový dialog, potvrď **Vždy povolit**, pak už je klid.
 
-Endpoint svůj limit četnosti v hlavičkách nehlásí, odstup mezi dotazy se proto ladí za běhu:
-startuje na minutě, po HTTP 429 se zdvojnásobí až k patnácti minutám a po každém úspěchu
-klesá zpět k minutě. Ověřit ho jde i z terminálu, ale pozor, ukusuje ze stejného limitu:
+Endpoint svůj limit četnosti v hlavičkách nehlásí, odstup mezi dotazy se proto ladí za
+běhu: startuje na minutě, po HTTP 429 se zdvojnásobí až k patnácti minutám a po každém
+úspěchu klesá zpět k minutě.
+
+Hlavička panelu píše, jak staré číslo vidíš, po najetí myší i to, odkud pochází.
+Nad 15 minut zoranžoví.
+
+Ověření z terminálu, pozor, ukusuje ze stejného limitu jako widget:
 
 ```bash
 "/Applications/Claude Usage.app/Contents/MacOS/ClaudeUsage" --test-api
 ```
+
+Neúspěchy se zapisují do `~/Library/Logs/ClaudeUsage.log` včetně OSStatus z Keychainu.
 
 ## Přepočet na API
 
@@ -60,10 +70,9 @@ se dopočítá z celkového poměru téhož modelu.
 
 ## Nastavení
 
-V liště buď session, weekly, obojí, nebo vyšší z obou. Dál rozsah grafu (14 / 30 / 60 dní),
-ikona v liště, živé čtení z API a spouštění po přihlášení.
-
-Soubory se čtou jen když se změní čas jejich úpravy, takže widget na pozadí nic nedělá.
+V liště buď session, weekly, obojí, nebo vyšší z obou, ve tvaru `45 % s | 35 % w`.
+Dál rozsah grafu (14 / 30 / 60 dní), ikona v liště, živé čtení z API a spouštění
+po přihlášení.
 
 ## Odinstalace
 
