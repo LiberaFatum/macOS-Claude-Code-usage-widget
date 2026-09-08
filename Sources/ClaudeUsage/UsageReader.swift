@@ -39,7 +39,7 @@ struct UsageSnapshot {
     var isStale: Bool { source == .cache && age > 15 * 60 }
 
     var freshnessLabel: String {
-        source == .api ? "živě · \(Fmt.agoShort(fetchedAt))" : "cache · \(Fmt.agoShort(fetchedAt))"
+        (source == .api ? "živě · " : "cache · ") + Fmt.elapsed(since: fetchedAt)
     }
 }
 

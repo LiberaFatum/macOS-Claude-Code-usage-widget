@@ -46,22 +46,23 @@ enum Fmt {
         return "\(m) m"
     }
 
-    /// "právě teď" / "před 4 min" / "před 3 h"
+    /// "před 43 s" / "před 12 min 30 s" / "před 3 h 12 min"
     static func ago(_ date: Date) -> String {
-        let seconds = Int(Date().timeIntervalSince(date))
-        if seconds < 60 { return "právě teď" }
-        if seconds < 3600 { return "před \(seconds / 60) min" }
-        if seconds < 86400 { return "před \(seconds / 3600) h" }
-        return "před \(seconds / 86400) dny"
+        "před " + elapsed(since: date)
     }
 
-    /// Kompaktní tvar do hlavičky: "teď" / "6 min" / "3 h" / "2 dny"
-    static func agoShort(_ date: Date) -> String {
-        let seconds = Int(Date().timeIntervalSince(date))
-        if seconds < 60 { return "teď" }
-        if seconds < 3600 { return "\(seconds / 60) min" }
-        if seconds < 86400 { return "\(seconds / 3600) h" }
-        return "\(seconds / 86400) dny"
+    /// Přesné stáří údaje, vždy dvě nejvyšší nenulové jednotky.
+    /// "43 s" / "12 min 30 s" / "3 h 12 min" / "2 d 4 h"
+    static func elapsed(since date: Date) -> String {
+        let total = max(0, Int(Date().timeIntervalSince(date).rounded()))
+        let d = total / 86400
+        let h = (total % 86400) / 3600
+        let m = (total % 3600) / 60
+        let s = total % 60
+        if d > 0 { return "\(d) d \(h) h" }
+        if h > 0 { return "\(h) h \(m) min" }
+        if m > 0 { return "\(m) min \(s) s" }
+        return "\(s) s"
     }
 
     static func color(forPercent percent: Double) -> Color {
