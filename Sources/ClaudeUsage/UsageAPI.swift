@@ -21,12 +21,19 @@ enum UsageAPI {
         }
     }
 
+    /// Čtení tokenu může vyvolat dialog Keychainu, který blokuje volající vlákno,
+    /// proto se celé volání odsouvá mimo hlavní vlákno.
     static func fetch(completion: @escaping (Result<UsageSnapshot, Failure>) -> Void) {
-        guard let token = Credentials.accessToken() else {
-            completion(.failure(.noToken))
-            return
+        DispatchQueue.global(qos: .utility).async {
+            guard let token = Credentials.accessToken() else {
+                completion(.failure(.noToken))
+                return
+            }
+            send(token: token, completion: completion)
         }
+    }
 
+    private static func send(token: String, completion: @escaping (Result<UsageSnapshot, Failure>) -> Void) {
         var request = URLRequest(url: endpoint)
         request.timeoutInterval = 10
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")

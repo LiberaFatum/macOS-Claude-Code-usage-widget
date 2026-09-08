@@ -47,6 +47,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var seenModificationDates: [String: Date] = [:]
     private var apiNote: String?
     private var apiInFlight = false
+    private var apiRetryAfter: Date?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // launchd i ruční spuštění mohou nastat současně, druhá kopie by přidala
@@ -89,6 +90,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func fetchLive() {
         guard !apiInFlight else { return }
+        // Po neúspěchu se chvíli nezkouší, ať uživateli neskáče dialog Keychainu dokola.
+        if let retryAfter = apiRetryAfter, retryAfter > Date() { return }
         apiInFlight = true
         UsageAPI.fetch { [weak self] result in
             DispatchQueue.main.async {
@@ -98,8 +101,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 case .success(let snapshot):
                     self.usage = snapshot
                     self.apiNote = nil
+                    self.apiRetryAfter = nil
                 case .failure(let error):
                     self.apiNote = "Živé čtení selhalo (\(error)), používá se cache."
+                    self.apiRetryAfter = Date().addingTimeInterval(300)
                 }
                 self.updateStatusTitle()
             }
@@ -320,6 +325,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc private func toggleLiveAPI() {
         Preferences.liveAPI.toggle()
         apiNote = nil
+        apiRetryAfter = nil
         if Preferences.liveAPI { fetchLive() }
         rebuildMenu()
     }
