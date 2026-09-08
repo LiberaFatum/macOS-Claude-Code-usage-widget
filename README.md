@@ -46,14 +46,16 @@ hledá v `~/.claude/.credentials.json` a pak v Keychainu, načte se **jednou za 
 aplikace** a drží se jen v paměti, znovu se sáhne dolů až po HTTP 401 nebo 403. První
 čtení Keychainu vyvolá systémový dialog, potvrď **Vždy povolit**, pak už je klid.
 
-Endpoint svůj limit četnosti v hlavičkách nehlásí, odstup mezi dotazy se proto ladí za
-běhu: startuje na minutě, po HTTP 429 se zdvojnásobí až k patnácti minutám a po každém
-úspěchu klesá zpět k minutě.
+Endpoint svůj limit četnosti nehlásí užitečně (na 429 posílá `retry-after: 0`), odstup
+mezi dotazy se proto ladí za běhu: startuje na dvou minutách, po HTTP 429 se zdvojnásobí
+až k patnácti minutám a po každém úspěchu klesá zpět ke dvěma minutám. Minuta byla
+měřitelně příliš rychlá.
 
 Hlavička panelu píše, jak staré číslo vidíš, po najetí myší i to, odkud pochází.
 Nad 15 minut zoranžoví.
 
-Ověření z terminálu, pozor, ukusuje ze stejného limitu jako widget:
+Ověření z terminálu, pozor, ukusuje ze stejného limitu jako běžící widget, takže
+těsně po jeho dotazu vrátí 429:
 
 ```bash
 "/Applications/Claude Usage.app/Contents/MacOS/ClaudeUsage" --test-api

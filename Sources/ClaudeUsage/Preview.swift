@@ -7,16 +7,31 @@ enum Preview {
     static func render(to path: String) {
         // Snímek do dokumentace má ukazovat čerstvá čísla, ne cache, takže se
         // živé čtení zkouší vždy a na jeho nezdaru nezáleží.
+        // Dotaz umí trvat i deset vteřin a při souběhu s běžícím widgetem vrátí 429,
+        // proto štědrý časový strop a jedno zopakování.
         var usage = UsageReader.read()
-        let done = DispatchSemaphore(value: 0)
-        UsageAPI.fetch { result in
-            switch result {
-            case .success(let snapshot): usage = snapshot
-            case .failure(let error): print("Živé čtení pro snímek selhalo: \(error)")
+        for attempt in 1...2 {
+            let done = DispatchSemaphore(value: 0)
+            var rateLimited = false
+            UsageAPI.fetch { result in
+                switch result {
+                case .success(let snapshot):
+                    usage = snapshot
+                case .failure(.rateLimited):
+                    rateLimited = true
+                case .failure(let error):
+                    print("Živé čtení pro snímek selhalo: \(error)")
+                }
+                done.signal()
             }
-            done.signal()
+            if done.wait(timeout: .now() + 30) == .timedOut {
+                print("Živé čtení pro snímek nedoběhlo včas.")
+                break
+            }
+            guard rateLimited, attempt == 1 else { break }
+            print("Endpoint omezil četnost, zkouším ještě jednou za 20 s.")
+            Thread.sleep(forTimeInterval: 20)
         }
-        _ = done.wait(timeout: .now() + 12)
 
         let view = UsageContentView(usage: usage, stats: StatsReader.read())
             .background(Color(nsColor: NSColor(calibratedWhite: 0.16, alpha: 1)))

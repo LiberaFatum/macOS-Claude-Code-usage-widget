@@ -60,9 +60,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// Endpoint /api/oauth/usage svůj limit četnosti nehlásí v hlavičkách, takže
     /// se odstup ladí za běhu: startuje na minutě, po HTTP 429 se zdvojnásobí
     /// a po každém úspěchu zase klesá zpět k minimu.
-    private let apiFloorInterval: TimeInterval = 60
+    private let apiFloorInterval: TimeInterval = 120
     private let apiCeilingInterval: TimeInterval = 900
-    private var apiInterval: TimeInterval = 60
+    private var apiInterval: TimeInterval = 120
 
     /// I ruční "Načíst znovu" má strop, ať se endpoint nedá uklikat.
     private let apiForcedInterval: TimeInterval = 20
