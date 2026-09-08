@@ -49,9 +49,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var apiInFlight = false
     private var apiNextAllowed: Date?
 
-    /// Endpoint /api/oauth/usage má vlastní limit četnosti, tohle je rozumný odstup
-    /// mezi dotazy. Interval načítání v nastavení se týká jen čtení souborů.
-    private let apiMinimumInterval: TimeInterval = 90
+    /// Endpoint /api/oauth/usage má vlastní limit četnosti a procenta se stejně
+    /// mění pomalu, pět minut je bezpečný odstup. Interval načítání v nastavení
+    /// se týká jen čtení souborů, ten je zadarmo.
+    private let apiMinimumInterval: TimeInterval = 300
+
+    /// I ruční "Načíst znovu" má strop, ať se endpoint nedá uklikat.
+    private let apiForcedInterval: TimeInterval = 60
+    private var apiLastAttempt: Date?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // launchd i ruční spuštění mohou nastat současně, druhá kopie by přidala
@@ -94,7 +99,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func fetchLive(force: Bool = false) {
         guard !apiInFlight else { return }
+        if let last = apiLastAttempt, Date().timeIntervalSince(last) < apiForcedInterval { return }
         if !force, let next = apiNextAllowed, next > Date() { return }
+        apiLastAttempt = Date()
         apiInFlight = true
         UsageAPI.fetch { [weak self] result in
             DispatchQueue.main.async {
