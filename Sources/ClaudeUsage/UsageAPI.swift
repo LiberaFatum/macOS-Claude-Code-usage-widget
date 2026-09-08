@@ -7,6 +7,7 @@ enum UsageAPI {
 
     enum Failure: Error, CustomStringConvertible {
         case noToken
+        case rateLimited(TimeInterval?)
         case http(Int)
         case transport(String)
         case malformed
@@ -14,9 +15,19 @@ enum UsageAPI {
         var description: String {
             switch self {
             case .noToken: return "token nenalezen"
+            case .rateLimited: return "endpoint omezuje četnost dotazů"
             case .http(let code): return "HTTP \(code)"
             case .transport(let message): return message
             case .malformed: return "neznámý formát odpovědi"
+            }
+        }
+
+        /// Jak dlouho počkat, než se zkusí další dotaz.
+        var backoff: TimeInterval {
+            switch self {
+            case .rateLimited(let after): return after ?? 900
+            case .noToken: return 3600
+            default: return 300
             }
         }
     }
@@ -45,7 +56,13 @@ enum UsageAPI {
                 completion(.failure(.transport(error.localizedDescription)))
                 return
             }
-            let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+            let http = response as? HTTPURLResponse
+            let status = http?.statusCode ?? 0
+            if status == 429 {
+                let retryAfter = (http?.value(forHTTPHeaderField: "Retry-After")).flatMap(TimeInterval.init)
+                completion(.failure(.rateLimited(retryAfter)))
+                return
+            }
             guard status == 200 else {
                 completion(.failure(.http(status)))
                 return

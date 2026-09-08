@@ -47,7 +47,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var seenModificationDates: [String: Date] = [:]
     private var apiNote: String?
     private var apiInFlight = false
-    private var apiRetryAfter: Date?
+    private var apiNextAllowed: Date?
+
+    /// Endpoint /api/oauth/usage má vlastní limit četnosti, tohle je rozumný odstup
+    /// mezi dotazy. Interval načítání v nastavení se týká jen čtení souborů.
+    private let apiMinimumInterval: TimeInterval = 90
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // launchd i ruční spuštění mohou nastat současně, druhá kopie by přidala
@@ -88,10 +92,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if Preferences.liveAPI { fetchLive() }
     }
 
-    private func fetchLive() {
+    private func fetchLive(force: Bool = false) {
         guard !apiInFlight else { return }
-        // Po neúspěchu se chvíli nezkouší, ať uživateli neskáče dialog Keychainu dokola.
-        if let retryAfter = apiRetryAfter, retryAfter > Date() { return }
+        if !force, let next = apiNextAllowed, next > Date() { return }
         apiInFlight = true
         UsageAPI.fetch { [weak self] result in
             DispatchQueue.main.async {
@@ -101,10 +104,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 case .success(let snapshot):
                     self.usage = snapshot
                     self.apiNote = nil
-                    self.apiRetryAfter = nil
+                    self.apiNextAllowed = Date().addingTimeInterval(self.apiMinimumInterval)
                 case .failure(let error):
                     self.apiNote = "Živé čtení selhalo (\(error)), používá se cache."
-                    self.apiRetryAfter = Date().addingTimeInterval(300)
+                    self.apiNextAllowed = Date().addingTimeInterval(error.backoff)
                 }
                 self.updateStatusTitle()
             }
@@ -293,6 +296,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc private func refreshNow() {
         refresh()
+        if Preferences.liveAPI { fetchLive(force: true) }
         rebuildMenu()
     }
 
@@ -325,7 +329,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc private func toggleLiveAPI() {
         Preferences.liveAPI.toggle()
         apiNote = nil
-        apiRetryAfter = nil
+        apiNextAllowed = nil
         if Preferences.liveAPI { fetchLive() }
         rebuildMenu()
     }
