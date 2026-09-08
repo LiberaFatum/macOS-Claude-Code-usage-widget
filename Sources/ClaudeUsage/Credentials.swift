@@ -8,17 +8,52 @@ import Security
 enum Credentials {
     private static let keychainServices = ["Claude Code-credentials", "Claude Code"]
 
+    /// Token se drží v paměti procesu. Každé čtení Keychainu může vyvolat systémový
+    /// dialog, takže se sahá dolů jen jednou za běh a znovu až když token přestane platit.
+    private static let lock = NSLock()
+    private static var cached: String?
+
+    /// Poslední výsledek hledání v Keychainu, pro diagnostiku.
+    private(set) static var lastStatus: OSStatus = errSecSuccess
+    private(set) static var lastSource = "nic"
+
     static var fileURL: URL {
         FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent(".claude/.credentials.json")
     }
 
     static func accessToken() -> String? {
-        if let data = try? Data(contentsOf: fileURL), let token = parse(data) { return token }
-        for service in keychainServices {
-            if let data = keychainData(service: service), let token = parse(data) { return token }
+        lock.lock()
+        defer { lock.unlock() }
+        if let cached { return cached }
+
+        if let data = try? Data(contentsOf: fileURL), let token = parse(data) {
+            cached = token
+            lastSource = "soubor"
+            return token
         }
+        for service in keychainServices {
+            let (data, status) = keychainData(service: service)
+            lastStatus = status
+            if let data, let token = parse(data) {
+                cached = token
+                lastSource = "keychain:\(service)"
+                return token
+            }
+        }
+        lastSource = "nenalezeno"
         return nil
+    }
+
+    static var diagnosis: String {
+        "zdroj=\(lastSource) OSStatus=\(lastStatus) (\(SecCopyErrorMessageString(lastStatus, nil) as String? ?? "?"))"
+    }
+
+    /// Zahodí token z paměti, aby se po vypršení načetl znovu.
+    static func invalidate() {
+        lock.lock()
+        cached = nil
+        lock.unlock()
     }
 
     private static func parse(_ data: Data) -> String? {
@@ -30,7 +65,7 @@ enum Credentials {
         return (root["accessToken"] as? String).flatMap { $0.isEmpty ? nil : $0 }
     }
 
-    private static func keychainData(service: String) -> Data? {
+    private static func keychainData(service: String) -> (Data?, OSStatus) {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
@@ -38,7 +73,7 @@ enum Credentials {
             kSecMatchLimit as String: kSecMatchLimitOne
         ]
         var item: CFTypeRef?
-        guard SecItemCopyMatching(query as CFDictionary, &item) == errSecSuccess else { return nil }
-        return item as? Data
+        let status = SecItemCopyMatching(query as CFDictionary, &item)
+        return (status == errSecSuccess ? item as? Data : nil, status)
     }
 }

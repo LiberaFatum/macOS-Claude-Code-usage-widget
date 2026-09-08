@@ -8,6 +8,11 @@ import Foundation
 enum LaunchAtLogin {
     static let label = "com.liberafatum.claude-usage-widget"
 
+    static var logURL: URL {
+        FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Logs/ClaudeUsage.log")
+    }
+
     static var plistURL: URL {
         FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Library/LaunchAgents/\(label).plist")
@@ -33,7 +38,9 @@ enum LaunchAtLogin {
             "ProgramArguments": [executablePath],
             "RunAtLoad": true,
             "KeepAlive": false,
-            "ProcessType": "Interactive"
+            "ProcessType": "Interactive",
+            "StandardOutPath": logURL.path,
+            "StandardErrorPath": logURL.path
         ]
         do {
             try FileManager.default.createDirectory(

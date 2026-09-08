@@ -40,6 +40,7 @@ enum UsageAPI {
     static func fetch(completion: @escaping (Result<UsageSnapshot, Failure>) -> Void) {
         DispatchQueue.global(qos: .utility).async {
             guard let token = Credentials.accessToken() else {
+                NSLog("ClaudeUsage: token nenačten, %@", Credentials.diagnosis)
                 completion(.failure(.noToken))
                 return
             }
@@ -67,10 +68,18 @@ enum UsageAPI {
                     return key.contains("ratelimit") || key.contains("retry-after")
                 }
             }
+            // Loguje se jen to, co nevyšlo, ať soubor nebobtná řádkem za minutu.
+            if status != 200 {
+                NSLog("ClaudeUsage: /api/oauth/usage -> HTTP %d (%@)", status, Credentials.lastSource)
+            }
             if status == 429 {
                 let retryAfter = (http?.value(forHTTPHeaderField: "Retry-After")).flatMap(TimeInterval.init)
                 completion(.failure(.rateLimited(retryAfter)))
                 return
+            }
+            if status == 401 || status == 403 {
+                // Token vypršel, ať si ho příští pokus načte znovu.
+                Credentials.invalidate()
             }
             guard status == 200 else {
                 completion(.failure(.http(status)))

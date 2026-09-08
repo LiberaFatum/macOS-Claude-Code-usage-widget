@@ -30,12 +30,26 @@ a nesahá na klíče ani na Keychain.
 | `~/.claude.json`, klíč `cachedUsageUtilization` | procenta session a weekly limitu, časy resetu |
 | `~/.claude/stats-cache.json` | tokeny po dnech a modelech, celkové součty |
 
-**Proč jsou limity pozadu:** `cachedUsageUtilization` je cache, kterou obnovuje Claude Code
-zhruba jednou za 5 minut, a jen když běží. Zkrácení intervalu v nastavení proto nepomůže,
-čte se pořád stejně starý údaj. Widget navíc sleduje čas změny souboru a načte ho hned,
-jak se přepíše. Panel proto v pravém horním rohu píše stáří dat, nad 15 minut oranžově.
+`cachedUsageUtilization` je cache, kterou přepisuje Claude Code při startu a při příkazu
+`/usage`. Widget hlídá čas změny souboru a načte ho hned, jak se přepíše, ale čerstvější
+než cache sám o sobě nebude. Hlavička panelu proto píše zdroj a stáří údaje.
 
 `stats-cache.json` se přepočítává po dnech, graf tak většinou končí včerejškem.
+
+## Živé čtení limitů
+
+**Nastavení > Číst limity živě z API** obejde cache a zavolá `https://api.anthropic.com/api/oauth/usage`,
+tedy stejný endpoint jako Claude Code. Token se hledá v `~/.claude/.credentials.json` a pak
+v Keychainu, načte se jednou za běh aplikace a drží se jen v paměti. První čtení Keychainu
+vyvolá systémový dialog, potvrď **Vždy povolit**.
+
+Endpoint svůj limit četnosti v hlavičkách nehlásí, odstup mezi dotazy se proto ladí za běhu:
+startuje na minutě, po HTTP 429 se zdvojnásobí až k patnácti minutám a po každém úspěchu
+klesá zpět k minutě. Ověřit ho jde i z terminálu, ale pozor, ukusuje ze stejného limitu:
+
+```bash
+"/Applications/Claude Usage.app/Contents/MacOS/ClaudeUsage" --test-api
+```
 
 ## Přepočet na API
 
@@ -46,8 +60,10 @@ se dopočítá z celkového poměru téhož modelu.
 
 ## Nastavení
 
-V liště buď session, weekly, obojí, nebo vyšší z obou. Dál interval načítání, rozsah
-grafu (14 / 30 / 60 dní), ikona v liště a spouštění po přihlášení.
+V liště buď session, weekly, obojí, nebo vyšší z obou. Dál rozsah grafu (14 / 30 / 60 dní),
+ikona v liště, živé čtení z API a spouštění po přihlášení.
+
+Soubory se čtou jen když se změní čas jejich úpravy, takže widget na pozadí nic nedělá.
 
 ## Odinstalace
 

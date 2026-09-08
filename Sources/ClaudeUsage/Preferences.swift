@@ -19,19 +19,9 @@ enum MenuBarMode: String, CaseIterable {
 enum Preferences {
     private static let defaults = UserDefaults.standard
 
-    static let refreshIntervals: [TimeInterval] = [10, 30, 60, 300]
-
     static var menuBarMode: MenuBarMode {
         get { MenuBarMode(rawValue: defaults.string(forKey: "menuBarMode") ?? "") ?? .both }
         set { defaults.set(newValue.rawValue, forKey: "menuBarMode") }
-    }
-
-    static var refreshInterval: TimeInterval {
-        get {
-            let stored = defaults.double(forKey: "refreshInterval")
-            return refreshIntervals.contains(stored) ? stored : 30
-        }
-        set { defaults.set(newValue, forKey: "refreshInterval") }
     }
 
     static var showIcon: Bool {

@@ -48,8 +48,8 @@ default:
 
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var statusItem: NSStatusItem!
-    private var timer: Timer?
-    private var watchTimer: Timer?
+    private var tick: Timer?
+    private var menuIsOpen = false
     private var usage: UsageSnapshot?
     private var stats: StatsSnapshot?
     private var seenModificationDates: [String: Date] = [:]
@@ -83,19 +83,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         statusItem.button?.imagePosition = .imageLeading
         rebuildMenu()
-        refresh()
-        restartTimer()
-        startWatching()
+        refresh(force: true)
+        startTicking()
     }
 
     func applicationWillTerminate(_ notification: Notification) {
-        timer?.invalidate()
-        watchTimer?.invalidate()
+        tick?.invalidate()
     }
 
     // MARK: - Data
 
-    private func refresh() {
+    /// Soubory se přeparsují jen když se změnil čas jejich úpravy, jinak by se
+    /// zbytečně přečetlo skoro sto kilobajtů JSONu každou vteřinu.
+    @discardableResult
+    private func filesChanged() -> Bool {
+        var changed = false
+        for url in [UsageReader.path, StatsReader.path] {
+            let modified = (try? FileManager.default
+                .attributesOfItem(atPath: url.path)[.modificationDate] as? Date) ?? nil
+            guard let modified else { continue }
+            if seenModificationDates[url.path] != modified {
+                seenModificationDates[url.path] = modified
+                changed = true
+            }
+        }
+        return changed
+    }
+
+    private func refresh(force: Bool = false) {
+        guard filesChanged() || force else { return }
         let cached = UsageReader.read()
         // Živá data přebijí cache; než dorazí, ukazuje se poslední známý stav.
         if usage == nil || usage?.source == .cache {
@@ -105,7 +121,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         stats = StatsReader.read()
         updateStatusTitle()
-        if Preferences.liveAPI { fetchLive() }
+        updateContentView()
+    }
+
+    /// Jediný tep aplikace: hlídá změnu souborů, drží odpočty naživu a pouští
+    /// živé čtení, jakmile uplyne jeho vlastní odstup.
+    private func startTicking() {
+        tick = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+            guard let self else { return }
+            self.refresh()
+            if Preferences.liveAPI { self.fetchLive() }
+            if self.menuIsOpen { self.updateContentView() }
+        }
+        tick?.tolerance = 0.3
     }
 
     private func fetchLive(force: Bool = false) {
@@ -139,34 +167,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 self.updateContentView()
             }
         }
-    }
-
-    private func restartTimer() {
-        timer?.invalidate()
-        timer = Timer.scheduledTimer(withTimeInterval: Preferences.refreshInterval, repeats: true) { [weak self] _ in
-            self?.refresh()
-        }
-        timer?.tolerance = 2
-    }
-
-    /// Sleduje čas změny obou souborů a načte je hned, jak je Claude Code přepíše.
-    /// Samotná čerstvost dat tím ale nevzroste, viz `UsageSnapshot.age`.
-    private func startWatching() {
-        watchTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
-            guard let self else { return }
-            var changed = false
-            for url in [UsageReader.path, StatsReader.path] {
-                let modified = (try? FileManager.default
-                    .attributesOfItem(atPath: url.path)[.modificationDate] as? Date) ?? nil
-                guard let modified else { continue }
-                if self.seenModificationDates[url.path] != modified {
-                    self.seenModificationDates[url.path] = modified
-                    changed = true
-                }
-            }
-            if changed { self.refresh() }
-        }
-        watchTimer?.tolerance = 0.3
     }
 
     private func updateStatusTitle() {
@@ -273,17 +273,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
 
         submenu.addItem(.separator())
-        submenu.addItem(sectionHeader("Načítat každých"))
-        for interval in Preferences.refreshIntervals {
-            let title = interval < 60 ? "\(Int(interval)) s" : "\(Int(interval / 60)) min"
-            let entry = NSMenuItem(title: title, action: #selector(setInterval(_:)), keyEquivalent: "")
-            entry.target = self
-            entry.representedObject = interval
-            entry.state = Preferences.refreshInterval == interval ? .on : .off
-            submenu.addItem(entry)
-        }
-
-        submenu.addItem(.separator())
         submenu.addItem(sectionHeader("Rozsah grafu"))
         for days in [14, 30, 60] {
             let entry = NSMenuItem(title: "\(days) dní", action: #selector(setChartDays(_:)), keyEquivalent: "")
@@ -322,29 +311,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     func menuWillOpen(_ menu: NSMenu) {
-        refresh()
-        rebuildMenu()
+        menuIsOpen = true
+        refresh(force: true)
+        if Preferences.liveAPI { fetchLive() }
+    }
+
+    func menuDidClose(_ menu: NSMenu) {
+        menuIsOpen = false
     }
 
     // MARK: - Akce
 
     @objc private func refreshNow() {
-        refresh()
+        refresh(force: true)
         if Preferences.liveAPI { fetchLive(force: true) }
-        rebuildMenu()
     }
 
     @objc private func setMode(_ sender: NSMenuItem) {
         guard let raw = sender.representedObject as? String, let mode = MenuBarMode(rawValue: raw) else { return }
         Preferences.menuBarMode = mode
         updateStatusTitle()
-        rebuildMenu()
-    }
-
-    @objc private func setInterval(_ sender: NSMenuItem) {
-        guard let interval = sender.representedObject as? TimeInterval else { return }
-        Preferences.refreshInterval = interval
-        restartTimer()
         rebuildMenu()
     }
 
