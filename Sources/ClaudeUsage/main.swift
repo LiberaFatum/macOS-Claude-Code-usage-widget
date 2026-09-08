@@ -122,7 +122,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if let tint, tint >= 80 {
             attributes[.foregroundColor] = tint >= 95 ? NSColor.systemRed : NSColor.systemOrange
         }
-        button.attributedTitle = NSAttributedString(string: text, attributes: attributes)
+        // Mezera navíc, aby se text nelepil na maskota.
+        button.attributedTitle = NSAttributedString(string: " " + text, attributes: attributes)
         button.image = Preferences.showIcon ? Mascot.statusBarImage() : nil
         button.toolTip = tooltip()
     }
