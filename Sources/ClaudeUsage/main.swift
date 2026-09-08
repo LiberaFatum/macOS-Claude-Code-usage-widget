@@ -26,6 +26,14 @@ case "--test-api":
         case .failure(let error):
             print("Selhalo: \(error)")
         }
+        if UsageAPI.lastRateLimitHeaders.isEmpty {
+            print("Hlavičky o limitu četnosti: žádné")
+        } else {
+            print("Hlavičky o limitu četnosti:")
+            for (key, value) in UsageAPI.lastRateLimitHeaders.sorted(by: { $0.key < $1.key }) {
+                print("  \(key): \(value)")
+            }
+        }
         done.signal()
     }
     done.wait()
@@ -49,14 +57,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var apiInFlight = false
     private var apiNextAllowed: Date?
 
-    /// Endpoint /api/oauth/usage má vlastní limit četnosti a procenta se stejně
-    /// mění pomalu, pět minut je bezpečný odstup. Interval načítání v nastavení
-    /// se týká jen čtení souborů, ten je zadarmo.
-    private let apiMinimumInterval: TimeInterval = 300
+    /// Endpoint /api/oauth/usage svůj limit četnosti nehlásí v hlavičkách, takže
+    /// se odstup ladí za běhu: startuje na minutě, po HTTP 429 se zdvojnásobí
+    /// a po každém úspěchu zase klesá zpět k minimu.
+    private let apiFloorInterval: TimeInterval = 60
+    private let apiCeilingInterval: TimeInterval = 900
+    private var apiInterval: TimeInterval = 60
 
     /// I ruční "Načíst znovu" má strop, ať se endpoint nedá uklikat.
-    private let apiForcedInterval: TimeInterval = 60
+    private let apiForcedInterval: TimeInterval = 20
     private var apiLastAttempt: Date?
+    private var contentHost: NSHostingView<UsageContentView>?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // launchd i ruční spuštění mohou nastat současně, druhá kopie by přidala
@@ -111,12 +122,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 case .success(let snapshot):
                     self.usage = snapshot
                     self.apiNote = nil
-                    self.apiNextAllowed = Date().addingTimeInterval(self.apiMinimumInterval)
+                    self.apiInterval = max(self.apiFloorInterval, self.apiInterval * 0.75)
+                    self.apiNextAllowed = Date().addingTimeInterval(self.apiInterval)
+                case .failure(.rateLimited(let retryAfter)):
+                    self.apiInterval = min(self.apiCeilingInterval,
+                                           max(retryAfter ?? 0, self.apiInterval * 2))
+                    self.apiNote = "Endpoint omezil četnost, zkusí se za \(Int(self.apiInterval / 60)) min."
+                    self.apiNextAllowed = Date().addingTimeInterval(self.apiInterval)
                 case .failure(let error):
                     self.apiNote = "Živé čtení selhalo (\(error)), používá se cache."
                     self.apiNextAllowed = Date().addingTimeInterval(error.backoff)
                 }
                 self.updateStatusTitle()
+                // Odpověď dorazí asynchronně, takže i otevřené menu musí dostat nová data.
+                // Přepisuje se obsah položky, ne celé menu, jinak by se otevřené menu zavřelo.
+                self.updateContentView()
             }
         }
     }
@@ -216,6 +236,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let hosting = NSHostingView(rootView: UsageContentView(usage: usage, stats: stats, apiNote: apiNote))
         hosting.frame.size = hosting.fittingSize
         content.view = hosting
+        contentHost = hosting
         menu.addItem(content)
 
         menu.addItem(.separator())
@@ -230,6 +251,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(NSMenuItem(title: "Ukončit", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
 
         statusItem.menu = menu
+    }
+
+    private func updateContentView() {
+        guard let hosting = contentHost else { return }
+        hosting.rootView = UsageContentView(usage: usage, stats: stats, apiNote: apiNote)
+        hosting.frame.size = hosting.fittingSize
     }
 
     private func preferencesItem() -> NSMenuItem {

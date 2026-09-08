@@ -34,6 +34,9 @@ enum UsageAPI {
 
     /// Čtení tokenu může vyvolat dialog Keychainu, který blokuje volající vlákno,
     /// proto se celé volání odsouvá mimo hlavní vlákno.
+    /// Hlavičky o limitu četnosti z poslední odpovědi, pro --test-api.
+    static var lastRateLimitHeaders: [String: String] = [:]
+
     static func fetch(completion: @escaping (Result<UsageSnapshot, Failure>) -> Void) {
         DispatchQueue.global(qos: .utility).async {
             guard let token = Credentials.accessToken() else {
@@ -58,6 +61,12 @@ enum UsageAPI {
             }
             let http = response as? HTTPURLResponse
             let status = http?.statusCode ?? 0
+            if let fields = http?.allHeaderFields as? [String: String] {
+                lastRateLimitHeaders = fields.filter {
+                    let key = $0.key.lowercased()
+                    return key.contains("ratelimit") || key.contains("retry-after")
+                }
+            }
             if status == 429 {
                 let retryAfter = (http?.value(forHTTPHeaderField: "Retry-After")).flatMap(TimeInterval.init)
                 completion(.failure(.rateLimited(retryAfter)))
