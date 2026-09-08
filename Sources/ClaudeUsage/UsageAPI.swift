@@ -7,6 +7,8 @@ enum UsageAPI {
 
     enum Failure: Error, CustomStringConvertible {
         case noToken
+        case expiredToken(Date)
+        case unauthorized
         case rateLimited(TimeInterval?)
         case http(Int)
         case transport(String)
@@ -15,6 +17,8 @@ enum UsageAPI {
         var description: String {
             switch self {
             case .noToken: return "token nenalezen"
+            case .expiredToken: return "token vypršel, obnoví ho spuštění Claude Code"
+            case .unauthorized: return "token odmítnut, obnoví ho spuštění Claude Code"
             case .rateLimited: return "endpoint omezuje četnost dotazů"
             case .http(let code): return "HTTP \(code)"
             case .transport(let message): return message
@@ -27,6 +31,8 @@ enum UsageAPI {
             switch self {
             case .rateLimited(let after): return after ?? 900
             case .noToken: return 3600
+            // Token si obnovuje jen Claude Code, dřív než za půl hodiny nemá smysl zkoušet.
+            case .expiredToken, .unauthorized: return 1800
             default: return 300
             }
         }
@@ -39,12 +45,15 @@ enum UsageAPI {
 
     static func fetch(completion: @escaping (Result<UsageSnapshot, Failure>) -> Void) {
         DispatchQueue.global(qos: .utility).async {
-            guard let token = Credentials.accessToken() else {
+            switch Credentials.accessToken() {
+            case .token(let token):
+                send(token: token, completion: completion)
+            case .expired(let since):
+                completion(.failure(.expiredToken(since)))
+            case .unavailable:
                 NSLog("ClaudeUsage: token nenačten, %@", Credentials.diagnosis)
                 completion(.failure(.noToken))
-                return
             }
-            send(token: token, completion: completion)
         }
     }
 
@@ -78,8 +87,11 @@ enum UsageAPI {
                 return
             }
             if status == 401 || status == 403 {
-                // Token vypršel, ať si ho příští pokus načte znovu.
+                // Token přestal platit. Zahodí se z paměti, ale nové čtení Keychainu
+                // hlídá vlastní strop, aby uživateli neskákal dialog s heslem.
                 Credentials.invalidate()
+                completion(.failure(.unauthorized))
+                return
             }
             guard status == 200 else {
                 completion(.failure(.http(status)))

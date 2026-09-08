@@ -42,9 +42,12 @@ stárne. Proto to živé čtení.
 ## Živé čtení limitů
 
 **Nastavení > Číst limity živě z API** volá stejný endpoint jako Claude Code. Token se
-hledá v `~/.claude/.credentials.json` a pak v Keychainu, načte se **jednou za běh
-aplikace** a drží se jen v paměti, znovu se sáhne dolů až po HTTP 401 nebo 403. První
-čtení Keychainu vyvolá systémový dialog, potvrď **Vždy povolit**, pak už je klid.
+hledá v `~/.claude/.credentials.json` a pak v Keychainu, načte se jednou a drží se jen
+v paměti. První čtení Keychainu vyvolá systémový dialog, potvrď **Vždy povolit**.
+
+Token má omezenou platnost a obnovuje ho jen Claude Code. Widget si proto čte `expiresAt`
+a po vypršení už na API nesahá, jen napíše do panelu, že se čeká na obnovu. Do Keychainu
+sáhne nejvýš jednou za 15 minut, protože každé čtení může znovu vyvolat dialog s heslem.
 
 Endpoint svůj limit četnosti nehlásí užitečně (na 429 posílá `retry-after: 0`), odstup
 mezi dotazy se proto ladí za běhu: startuje na dvou minutách, po HTTP 429 se zdvojnásobí

@@ -12,6 +12,12 @@ enum Credentials {
     /// dialog, takže se sahá dolů jen jednou za běh a znovu až když token přestane platit.
     private static let lock = NSLock()
     private static var cached: String?
+    private static var cachedExpiry: Date?
+    private static var lastRead: Date?
+
+    /// Když token nevyjde, nesmí se sáhnout dolů hned znovu, jinak dialog s heslem
+    /// naskakuje pořád dokola.
+    private static let minimumReadInterval: TimeInterval = 900
 
     /// Poslední výsledek hledání v Keychainu, pro diagnostiku.
     private(set) static var lastStatus: OSStatus = errSecSuccess
@@ -22,47 +28,79 @@ enum Credentials {
             .appendingPathComponent(".claude/.credentials.json")
     }
 
-    static func accessToken() -> String? {
+    enum Outcome {
+        case token(String)
+        /// Token existuje, ale vypršel. Obnovit ho umí jen Claude Code.
+        case expired(Date)
+        /// Token nenalezen, nebo se do Keychainu teď nesmí sáhnout.
+        case unavailable
+    }
+
+    static func accessToken() -> Outcome {
         lock.lock()
         defer { lock.unlock() }
-        if let cached { return cached }
 
-        if let data = try? Data(contentsOf: fileURL), let token = parse(data) {
-            cached = token
-            lastSource = "soubor"
-            return token
+        if let token = cached {
+            guard let expiry = cachedExpiry, expiry <= Date() else { return .token(token) }
+            // Vypršelý token zahodit, ať se dole zkusí načíst ten, který mezitím
+            // mohl obnovit Claude Code.
+            cached = nil
+            cachedExpiry = nil
+            if let last = lastRead, Date().timeIntervalSince(last) < minimumReadInterval {
+                return .expired(expiry)
+            }
+        }
+
+        if let last = lastRead, Date().timeIntervalSince(last) < minimumReadInterval {
+            return .unavailable
+        }
+        lastRead = Date()
+
+        if let data = try? Data(contentsOf: fileURL), let parsed = parse(data) {
+            return store(parsed, source: "soubor")
         }
         for service in keychainServices {
             let (data, status) = keychainData(service: service)
             lastStatus = status
-            if let data, let token = parse(data) {
-                cached = token
-                lastSource = "keychain:\(service)"
-                return token
+            if let data, let parsed = parse(data) {
+                return store(parsed, source: "keychain:\(service)")
             }
         }
         lastSource = "nenalezeno"
-        return nil
+        return .unavailable
+    }
+
+    /// Zahodí token z paměti. Nové čtení Keychainu proběhne až po `minimumReadInterval`.
+    static func invalidate() {
+        lock.lock()
+        cached = nil
+        cachedExpiry = nil
+        lock.unlock()
     }
 
     static var diagnosis: String {
         "zdroj=\(lastSource) OSStatus=\(lastStatus) (\(SecCopyErrorMessageString(lastStatus, nil) as String? ?? "?"))"
     }
 
-    /// Zahodí token z paměti, aby se po vypršení načetl znovu.
-    static func invalidate() {
-        lock.lock()
-        cached = nil
-        lock.unlock()
+    private static func store(_ parsed: (token: String, expiry: Date?), source: String) -> Outcome {
+        cached = parsed.token
+        cachedExpiry = parsed.expiry
+        lastSource = source
+        if let expiry = parsed.expiry, expiry <= Date() { return .expired(expiry) }
+        return .token(parsed.token)
     }
 
-    private static func parse(_ data: Data) -> String? {
+    private static func parse(_ data: Data) -> (token: String, expiry: Date?)? {
         guard let root = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else { return nil }
-        if let oauth = root["claudeAiOauth"] as? [String: Any],
-           let token = oauth["accessToken"] as? String, !token.isEmpty {
-            return token
+        let holder = (root["claudeAiOauth"] as? [String: Any]) ?? root
+        guard let token = holder["accessToken"] as? String, !token.isEmpty else { return nil }
+
+        // expiresAt bývá v milisekundách, chybět ale může, pak se platnost neřeší.
+        var expiry: Date?
+        if let raw = holder["expiresAt"] as? Double ?? (holder["expiresAt"] as? Int).map(Double.init) {
+            expiry = Date(timeIntervalSince1970: raw > 1_000_000_000_000 ? raw / 1000 : raw)
         }
-        return (root["accessToken"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+        return (token, expiry)
     }
 
     private static func keychainData(service: String) -> (Data?, OSStatus) {

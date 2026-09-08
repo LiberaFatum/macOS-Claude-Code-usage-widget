@@ -60,9 +60,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// Endpoint /api/oauth/usage svůj limit četnosti nehlásí v hlavičkách, takže
     /// se odstup ladí za běhu: startuje na minutě, po HTTP 429 se zdvojnásobí
     /// a po každém úspěchu zase klesá zpět k minimu.
-    private let apiFloorInterval: TimeInterval = 120
+    private let apiFloorInterval: TimeInterval = 300
     private let apiCeilingInterval: TimeInterval = 900
-    private var apiInterval: TimeInterval = 120
+    private var apiInterval: TimeInterval = 300
 
     /// I ruční "Načíst znovu" má strop, ať se endpoint nedá uklikat.
     private let apiForcedInterval: TimeInterval = 20
@@ -158,7 +158,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                     self.apiNote = "Endpoint omezil četnost, zkusí se za \(Int(self.apiInterval / 60)) min."
                     self.apiNextAllowed = Date().addingTimeInterval(self.apiInterval)
                 case .failure(let error):
-                    self.apiNote = "Živé čtení selhalo (\(error)), používá se cache."
+                    self.apiNote = "Živé čtení: \(error). Používá se cache."
                     self.apiNextAllowed = Date().addingTimeInterval(error.backoff)
                 }
                 self.updateStatusTitle()
