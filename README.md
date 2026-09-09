@@ -45,6 +45,18 @@ stárne. Proto to živé čtení.
 hledá v `~/.claude/.credentials.json` a pak v Keychainu, načte se jednou a drží se jen
 v paměti. První čtení Keychainu vyvolá systémový dialog, potvrď **Vždy povolit**.
 
+### Proč aplikace potřebuje vlastní podpis
+
+Povolení "Povolit vždy" v Keychainu je navázané na otisk podepsané aplikace. Ad-hoc
+podpis se mění při každém překladu, takže by povolení po každé aktualizaci propadlo
+a systém by si znovu řekl o heslo. `install.sh` proto nejdřív vytvoří lokální
+podpisovou identitu `Claude Usage Local` (`Tools/create-signing-identity.sh`), certifikát
+zůstává jen na tvém stroji. Odstraní ji `uninstall.sh`, nebo ručně:
+
+```bash
+security delete-identity -c "Claude Usage Local"
+```
+
 Token má omezenou platnost a obnovuje ho jen Claude Code. Widget si proto čte `expiresAt`
 a po vypršení už na API nesahá, jen napíše do panelu, že se čeká na obnovu. Do Keychainu
 sáhne nejvýš jednou za 15 minut, protože každé čtení může znovu vyvolat dialog s heslem.

@@ -11,4 +11,6 @@ rm -f "$HOME/Library/LaunchAgents/$LABEL.plist"
 rm -rf "/Applications/$APP_NAME.app"
 defaults delete "$LABEL" 2>/dev/null || true
 
+security delete-identity -c "Claude Usage Local" 2>/dev/null || true
+
 echo "$APP_NAME odstraněna."

@@ -51,7 +51,17 @@ PLIST
 
 printf 'APPL????' > "$APP/Contents/PkgInfo"
 
-echo "==> Ad-hoc podpis"
-codesign --force --deep --sign - "$APP" 2>/dev/null || echo "    (podpis přeskočen)"
+# Stálá identita drží otisk aplikace mezi překlady, takže povolení přístupu
+# k tokenu v Keychainu nepropadne. Bez ní se podepisuje ad-hoc.
+IDENTITY="Claude Usage Local"
+if security find-identity -v -p codesigning 2>/dev/null | grep -q "$IDENTITY"; then
+    echo "==> Podpis identitou \"$IDENTITY\""
+    codesign --force --deep --sign "$IDENTITY" "$APP"
+else
+    echo "==> Ad-hoc podpis"
+    echo "    Pro stálý otisk spusť Tools/create-signing-identity.sh, jinak si systém"
+    echo "    po každé aktualizaci znovu řekne o heslo ke svazku klíčů."
+    codesign --force --deep --sign - "$APP" 2>/dev/null || echo "    (podpis přeskočen)"
+fi
 
 echo "==> Hotovo: $APP"
