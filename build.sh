@@ -54,9 +54,12 @@ printf 'APPL????' > "$APP/Contents/PkgInfo"
 # Stálá identita drží otisk aplikace mezi překlady, takže povolení přístupu
 # k tokenu v Keychainu nepropadne. Bez ní se podepisuje ad-hoc.
 IDENTITY="Claude Usage Local"
-if security find-identity -v -p codesigning 2>/dev/null | grep -q "$IDENTITY"; then
+# Identita je self-signed, takže ji "find-identity -p codesigning" nevypíše.
+# Otisk se proto hledá v úplném seznamu a codesign se volá přes něj.
+FINGERPRINT=$(security find-identity 2>/dev/null | grep "\"$IDENTITY\"" | head -1 | awk '{print $2}')
+if [ -n "$FINGERPRINT" ]; then
     echo "==> Podpis identitou \"$IDENTITY\""
-    codesign --force --deep --sign "$IDENTITY" "$APP"
+    codesign --force --deep --sign "$FINGERPRINT" "$APP"
 else
     echo "==> Ad-hoc podpis"
     echo "    Pro stálý otisk spusť Tools/create-signing-identity.sh, jinak si systém"

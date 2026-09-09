@@ -50,8 +50,11 @@ v paměti. První čtení Keychainu vyvolá systémový dialog, potvrď **Vždy 
 Povolení "Povolit vždy" v Keychainu je navázané na otisk podepsané aplikace. Ad-hoc
 podpis se mění při každém překladu, takže by povolení po každé aktualizaci propadlo
 a systém by si znovu řekl o heslo. `install.sh` proto nejdřív vytvoří lokální
-podpisovou identitu `Claude Usage Local` (`Tools/create-signing-identity.sh`), certifikát
-zůstává jen na tvém stroji. Odstraní ji `uninstall.sh`, nebo ručně:
+podpisovou identitu `Claude Usage Local` (`Tools/create-signing-identity.sh`) a podepíše
+jí aplikaci. Požadavek podpisu pak zní `identifier "com.liberafatum.claude-usage-widget"
+and certificate leaf = H"..."`, tedy nezávisle na obsahu binárky, a povolení v Keychainu
+přežije každou aktualizaci. Certifikát zůstává jen na tvém stroji a nemusí být systémem
+označen jako důvěryhodný, na podepisování to stačí. Odstraní ho `uninstall.sh`, nebo ručně:
 
 ```bash
 security delete-identity -c "Claude Usage Local"

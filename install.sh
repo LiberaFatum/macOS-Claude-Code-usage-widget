@@ -5,7 +5,7 @@ set -euo pipefail
 cd "$(dirname "$0")"
 APP_NAME="Claude Usage"
 
-if ! security find-identity -v -p codesigning 2>/dev/null | grep -q "Claude Usage Local"; then
+if ! security find-identity 2>/dev/null | grep -q '"Claude Usage Local"'; then
     ./Tools/create-signing-identity.sh || echo "Pokračuji s ad-hoc podpisem."
 fi
 
