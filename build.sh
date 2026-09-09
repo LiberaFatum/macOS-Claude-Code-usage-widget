@@ -4,6 +4,8 @@ set -euo pipefail
 
 cd "$(dirname "$0")"
 
+. ./Tools/preflight.sh
+
 APP_NAME="Claude Usage"
 BUNDLE_ID="com.liberafatum.claude-usage-widget"
 VERSION="1.0.0"
@@ -56,15 +58,23 @@ printf 'APPL????' > "$APP/Contents/PkgInfo"
 IDENTITY="Claude Usage Local"
 # Identita je self-signed, takže ji "find-identity -p codesigning" nevypíše.
 # Otisk se proto hledá v úplném seznamu a codesign se volá přes něj.
-FINGERPRINT=$(security find-identity 2>/dev/null | grep "\"$IDENTITY\"" | head -1 | awk '{print $2}')
+# "|| true" je nutné: bez shody vrací grep 1 a kvůli "set -euo pipefail" by se
+# skript v tomhle místě tiše ukončil, tedy přesně na stroji, kde identita ještě není.
+FINGERPRINT=$(security find-identity 2>/dev/null | grep "\"$IDENTITY\"" | head -1 | awk '{print $2}' || true)
 if [ -n "$FINGERPRINT" ]; then
     echo "==> Podpis identitou \"$IDENTITY\""
     codesign --force --deep --sign "$FINGERPRINT" "$APP"
 else
     echo "==> Ad-hoc podpis"
-    echo "    Pro stálý otisk spusť Tools/create-signing-identity.sh, jinak si systém"
-    echo "    po každé aktualizaci znovu řekne o heslo ke svazku klíčů."
+    echo "    Identita \"$IDENTITY\" nenalezena. Widget bude fungovat, ale při zapnutém"
+    echo "    živém čtení si systém po každé aktualizaci znovu řekne o heslo ke svazku"
+    echo "    klíčů. Trvale to vyřeší Tools/create-signing-identity.sh."
     codesign --force --deep --sign - "$APP" 2>/dev/null || echo "    (podpis přeskočen)"
+fi
+
+if [ ! -x "$APP/Contents/MacOS/ClaudeUsage" ]; then
+    echo "Sestavení bundlu selhalo, spustitelný soubor v $APP chybí." >&2
+    exit 1
 fi
 
 echo "==> Hotovo: $APP"

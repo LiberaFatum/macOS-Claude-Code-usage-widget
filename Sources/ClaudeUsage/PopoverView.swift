@@ -103,6 +103,13 @@ struct UsageContentView: View {
                 Divider().frame(height: 26).opacity(0.35)
                 TotalCell(caption: "celkem", value: Fmt.money(stats.allTimeCost), tint: .orange)
             }
+            if !stats.unpricedModels.isEmpty {
+                // Bez tohohle by se neznámý model z částky tiše ztratil.
+                Text("Bez ceny: \(stats.unpricedModels.map(Fmt.modelName).joined(separator: ", ")). Součty jsou o ně nižší.")
+                    .font(Fmt.meta)
+                    .foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
     }
 
@@ -192,7 +199,7 @@ struct LimitRow: View {
             ProgressBar(percent: limit.percent)
             HStack {
                 Spacer()
-                Text("reset za \(Fmt.countdown(to: limit.resetsAt))")
+                Text(Fmt.resetLabel(limit.resetsAt))
                     .font(Fmt.body)
                     .foregroundStyle(.tertiary)
             }

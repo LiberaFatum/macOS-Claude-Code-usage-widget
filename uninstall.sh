@@ -14,3 +14,6 @@ defaults delete "$LABEL" 2>/dev/null || true
 security delete-identity -c "Claude Usage Local" 2>/dev/null || true
 
 echo "$APP_NAME odstraněna."
+if [ -d "$HOME/.local/share/claude-usage-widget" ]; then
+    echo "Zdrojové soubory zůstaly v ~/.local/share/claude-usage-widget, smaž je ručně."
+fi

@@ -220,7 +220,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func tooltip() -> String {
         guard let usage else { return "Spotřeba Claude Code: zatím žádná data" }
         var lines = usage.limits.map {
-            "\($0.title): \(Int($0.percent.rounded())) % (reset za \(Fmt.countdown(to: $0.resetsAt)))"
+            "\($0.title): \(Int($0.percent.rounded())) % (\(Fmt.resetLabel($0.resetsAt)))"
         }
         lines.append("Aktualizováno \(usage.freshnessLabel)")
         return lines.joined(separator: "\n")

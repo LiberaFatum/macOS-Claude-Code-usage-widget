@@ -35,6 +35,12 @@ enum Fmt {
         return f.string(from: NSNumber(value: value)) ?? String(format: "%.\(places)f", value)
     }
 
+    /// Celá věta o resetu, aby nevznikalo "reset za resetuje se".
+    static func resetLabel(_ date: Date?) -> String {
+        guard let date, date.timeIntervalSinceNow > 0 else { return "resetuje se" }
+        return "reset za " + countdown(to: date)
+    }
+
     /// "2 h 34 m" / "5 d 23 h" / "resetuje se"
     static func countdown(to date: Date?) -> String {
         guard let date else { return "?" }
