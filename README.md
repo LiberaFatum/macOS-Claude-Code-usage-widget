@@ -55,7 +55,7 @@ Spouštění po restartu zapneš v menu widgetu: **Nastavení > Spouštět po p�
 | Instalace doběhla, ale v liště nic není | `open "/Applications/Claude Usage.app"`, pak `cat ~/Library/Logs/ClaudeUsage.log` |
 | V liště jsou otazníky místo procent | Claude Code na tomhle stroji ještě neběžel, nebo neuložil data. Spusť ho jednou a v jeho sezení napiš `/usage`. |
 | macOS tvrdí, že je aplikace poškozená | Stáhl jsi repozitář jako ZIP, který má karanténní příznak. Použij `git clone`, nebo spusť `xattr -dr com.apple.quarantine "/Applications/Claude Usage.app"`. |
-| Během instalace vyskočí okno svazku klíčů | Jednorázové, klikni na **Povolit vždy**. Podrobnosti níž v části o živém čtení. |
+| Během instalace vyskočí okno svazku klíčů | Klikni na **Povolit vždy**. Když se dialog vrací i další dny, nastav widgetu vlastní token, viz část o živém čtení. |
 
 Instalace nikdy nehlásí úspěch, pokud widget opravdu neběží. Když skončí chybou,
 poslední odstavec výpisu říká, co dělat.
@@ -103,6 +103,35 @@ protože by se zasekl na dialogu. Doplníš ho kdykoli:
 ```bash
 ./Tools/create-signing-identity.sh && ./install.sh
 ```
+
+### Vlastní token, když se systém pořád ptá na heslo
+
+Claude Code při obnově svého tokenu položku ve svazku klíčů přepíše, čímž se vynuluje
+seznam povolených aplikací. Povolení "Povolit vždy" tak propadne a dialog se vrací,
+typicky jednou nebo dvakrát denně. Řešením je dát widgetu vlastní dlouhodobý token,
+který si uloží do své vlastní položky. U položky, kterou aplikace sama vytvořila,
+se systém neptá, a Claude Code do ní nesahá.
+
+V opravdovém okně Terminálu, protože příkaz otevírá prohlížeč:
+
+```bash
+claude setup-token
+```
+
+Vypsaný token předej widgetu, třeba ze schránky:
+
+```bash
+pbpaste | "/Applications/Claude Usage.app/Contents/MacOS/ClaudeUsage" --set-token
+```
+
+Jde i ze souboru, `--set-token --file ~/token.txt`, nebo napsáním, když příkaz spustíš
+bez roury. Ověření musí psát `zdroj tokenu: vlastní token`:
+
+```bash
+"/Applications/Claude Usage.app/Contents/MacOS/ClaudeUsage" --test-api
+```
+
+Zpátky k tokenu Claude Code se vrátíš příkazem `--clear-token`.
 
 ### Platnost tokenu
 
