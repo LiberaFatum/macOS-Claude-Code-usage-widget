@@ -8,6 +8,12 @@ import Security
 enum Credentials {
     private static let keychainServices = ["Claude Code-credentials", "Claude Code"]
 
+    /// Vlastní položka widgetu. Vytváří ji sama aplikace, takže je v jejím seznamu
+    /// povolených a systém se na heslo neptá. Claude Code do ní nesahá, takže ji
+    /// nepřepíše ani při obnově svého tokenu.
+    private static let ownService = "com.liberafatum.claude-usage-widget"
+    private static let ownAccount = "usage-token"
+
     /// Token se drží v paměti procesu. Každé čtení Keychainu může vyvolat systémový
     /// dialog, takže se sahá dolů jen jednou za běh a znovu až když token přestane platit.
     private static let lock = NSLock()
@@ -56,6 +62,10 @@ enum Credentials {
         }
         lastRead = Date()
 
+        // Vlastní token má přednost, jeho čtení nikdy nevyvolá dialog.
+        if let own = ownToken() {
+            return store((own, nil), source: "vlastní token")
+        }
         if let data = try? Data(contentsOf: fileURL), let parsed = parse(data) {
             return store(parsed, source: "soubor")
         }
@@ -101,6 +111,71 @@ enum Credentials {
             expiry = Date(timeIntervalSince1970: raw > 1_000_000_000_000 ? raw / 1000 : raw)
         }
         return (token, expiry)
+    }
+
+    // MARK: - Vlastní token
+
+    static var hasOwnToken: Bool { ownToken() != nil }
+
+    private static func ownToken() -> String? {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: ownService,
+            kSecAttrAccount as String: ownAccount,
+            kSecReturnData as String: true,
+            kSecMatchLimit as String: kSecMatchLimitOne
+        ]
+        var item: CFTypeRef?
+        guard SecItemCopyMatching(query as CFDictionary, &item) == errSecSuccess,
+              let data = item as? Data,
+              let token = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !token.isEmpty else { return nil }
+        return token
+    }
+
+    /// Uloží token vydaný příkazem "claude setup-token".
+    @discardableResult
+    static func saveOwnToken(_ token: String) -> OSStatus {
+        lock.lock()
+        cached = nil
+        cachedExpiry = nil
+        lastRead = nil
+        lock.unlock()
+
+        let trimmed = token.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let data = trimmed.data(using: .utf8) else { return errSecParam }
+
+        let base: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: ownService,
+            kSecAttrAccount as String: ownAccount
+        ]
+        // Po prvním odemčení po startu, ať widget funguje i bez zásahu uživatele.
+        var attributes = base
+        attributes[kSecValueData as String] = data
+        attributes[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
+        attributes[kSecAttrLabel as String] = "Claude Usage widget token"
+
+        let status = SecItemAdd(attributes as CFDictionary, nil)
+        if status == errSecDuplicateItem {
+            return SecItemUpdate(base as CFDictionary, [kSecValueData as String: data] as CFDictionary)
+        }
+        return status
+    }
+
+    @discardableResult
+    static func deleteOwnToken() -> OSStatus {
+        lock.lock()
+        cached = nil
+        cachedExpiry = nil
+        lastRead = nil
+        lock.unlock()
+
+        return SecItemDelete([
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: ownService,
+            kSecAttrAccount as String: ownAccount
+        ] as CFDictionary)
     }
 
     private static func keychainData(service: String) -> (Data?, OSStatus) {

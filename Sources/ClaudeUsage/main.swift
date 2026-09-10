@@ -11,6 +11,50 @@ case "--disable-login-item":
     LaunchAtLogin.set(false)
     print("Spouštění po přihlášení vypnuto.")
     exit(0)
+case "--set-token":
+    // Token jde předat třemi způsoby, protože ne každé prostředí má interaktivní
+    // vstup: souborem, rourou, nebo napsáním do terminálu.
+    var token: String?
+    let rest = Array(CommandLine.arguments.dropFirst(2))
+    if let fileIndex = rest.firstIndex(of: "--file"), fileIndex + 1 < rest.count {
+        token = try? String(contentsOfFile: rest[fileIndex + 1], encoding: .utf8)
+    } else if isatty(FileHandle.standardInput.fileDescriptor) == 1 {
+        FileHandle.standardError.write("Vlož token z příkazu \"claude setup-token\" a potvrď Enterem:\n".data(using: .utf8)!)
+        token = readLine(strippingNewline: true)
+    } else {
+        let piped = FileHandle.standardInput.readDataToEndOfFile()
+        token = String(data: piped, encoding: .utf8)
+    }
+
+    guard let line = token?.trimmingCharacters(in: .whitespacesAndNewlines), !line.isEmpty else {
+        print("""
+        Nedostal jsem žádný token.
+
+        Předej ho jedním z těchhle způsobů:
+            claude setup-token > ~/token.txt
+            "/Applications/Claude Usage.app/Contents/MacOS/ClaudeUsage" --set-token --file ~/token.txt
+            rm ~/token.txt
+
+        nebo rourou:
+            pbpaste | "/Applications/Claude Usage.app/Contents/MacOS/ClaudeUsage" --set-token
+        """)
+        exit(1)
+    }
+    let saveStatus = Credentials.saveOwnToken(line)
+    if saveStatus == errSecSuccess {
+        print("Token uložen do vlastní položky svazku klíčů.")
+        print("Widget teď na položku Claude Code nesahá, takže se systém nebude ptát na heslo.")
+        print("Ověř to příkazem: \"/Applications/Claude Usage.app/Contents/MacOS/ClaudeUsage\" --test-api")
+        exit(0)
+    }
+    print("Uložení selhalo, OSStatus \(saveStatus).")
+    exit(1)
+case "--clear-token":
+    let clearStatus = Credentials.deleteOwnToken()
+    print(clearStatus == errSecSuccess || clearStatus == errSecItemNotFound
+        ? "Vlastní token smazán, widget se vrací k tokenu Claude Code."
+        : "Mazání selhalo, OSStatus \(clearStatus).")
+    exit(clearStatus == errSecSuccess || clearStatus == errSecItemNotFound ? 0 : 1)
 case "--test-api":
     // Ověří živé čtení limitů. Poprvé vyskočí dialog Keychainu, potvrď ho.
     let done = DispatchSemaphore(value: 0)
@@ -18,7 +62,7 @@ case "--test-api":
     UsageAPI.fetch { result in
         switch result {
         case .success(let snapshot):
-            print("OK, limity z API:")
+            print("OK, limity z API (zdroj tokenu: \(Credentials.lastSource)):")
             for limit in snapshot.limits {
                 print("  \(limit.title): \(Int(limit.percent.rounded())) %")
             }
