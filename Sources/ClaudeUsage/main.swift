@@ -203,8 +203,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                     self.apiInterval = max(self.apiFloorInterval, self.apiInterval * 0.75)
                     self.apiNextAllowed = Date().addingTimeInterval(self.apiInterval)
                 case .failure(.rateLimited(let retryAfter)):
-                    self.apiInterval = min(self.apiCeilingInterval,
-                                           max(retryAfter ?? 0, self.apiInterval * 2))
+                    // Když server řekne konkrétní čekání, platí i nad rámec stropu.
+                    // Ořezáváním se limit jen pořád obnovoval.
+                    if let retryAfter, retryAfter > 0 {
+                        self.apiInterval = max(retryAfter + 30, self.apiFloorInterval)
+                    } else {
+                        self.apiInterval = min(self.apiCeilingInterval, self.apiInterval * 2)
+                    }
                     self.apiNote = "Endpoint omezil četnost, zkusí se za \(Int(self.apiInterval / 60)) min."
                     self.apiNextAllowed = Date().addingTimeInterval(self.apiInterval)
                 case .failure(let error):
