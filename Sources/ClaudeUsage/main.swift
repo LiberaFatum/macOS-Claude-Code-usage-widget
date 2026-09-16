@@ -112,6 +112,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let apiForcedInterval: TimeInterval = 20
     private var apiLastAttempt: Date?
     private var contentHost: NSHostingView<UsageContentView>?
+    /// Vlastní token se čte bez dialogu. Bez něj se na pozadí do svazku klíčů
+    /// nesahá vůbec, aby uživateli nevyskakovalo okno s heslem uprostřed práce.
+    private var hasOwnToken = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // launchd i ruční spuštění mohou nastat současně, druhá kopie by přidala
@@ -126,6 +129,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         statusItem.button?.imagePosition = .imageLeading
+        hasOwnToken = Credentials.hasOwnToken
         rebuildMenu()
         refresh(force: true)
         startTicking()
@@ -174,7 +178,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         tick = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
             guard let self else { return }
             self.refresh()
-            if Preferences.liveAPI { self.fetchLive() }
+            // Na pozadí jen s vlastním tokenem. Token Claude Code se čte výhradně
+            // při otevření menu, tedy jako reakce na uživatelovo kliknutí.
+            if Preferences.liveAPI && self.hasOwnToken { self.fetchLive() }
             if self.menuIsOpen { self.updateContentView() }
         }
         tick?.tolerance = 0.3
@@ -336,8 +342,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let live = NSMenuItem(title: "Číst limity živě z API", action: #selector(toggleLiveAPI), keyEquivalent: "")
         live.target = self
         live.state = Preferences.liveAPI ? .on : .off
-        live.toolTip = "Volá stejný endpoint jako Claude Code. Vyžaduje jednorázové povolení přístupu k tokenu v Keychainu."
+        live.toolTip = hasOwnToken
+            ? "Volá stejný endpoint jako Claude Code, vlastním tokenem, bez dialogů."
+            : "Volá stejný endpoint jako Claude Code. Bez vlastního tokenu se čte jen při otevření tohoto menu, protože systém se ptá na heslo ke svazku klíčů."
         submenu.addItem(live)
+
+        let token = NSMenuItem(
+            title: hasOwnToken ? "Smazat vlastní token" : "Nastavit vlastní token…",
+            action: #selector(manageToken),
+            keyEquivalent: ""
+        )
+        token.target = self
+        token.toolTip = "Vlastní token z \"claude setup-token\" uloží widget do své vlastní položky svazku klíčů, u které se systém neptá na heslo."
+        submenu.addItem(token)
 
         let login = NSMenuItem(title: "Spouštět po přihlášení", action: #selector(toggleLoginItem), keyEquivalent: "")
         login.target = self
@@ -395,6 +412,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         apiNote = nil
         apiNextAllowed = nil
         if Preferences.liveAPI { fetchLive() }
+        rebuildMenu()
+    }
+
+    @objc private func manageToken() {
+        MainActor.assumeIsolated {
+            if hasOwnToken {
+                TokenSheet.clear()
+            } else {
+                TokenSheet.present()
+            }
+        }
+        hasOwnToken = Credentials.hasOwnToken
+        apiNote = nil
+        apiNextAllowed = nil
+        apiLastAttempt = nil
+        if Preferences.liveAPI { fetchLive(force: true) }
         rebuildMenu()
     }
 
