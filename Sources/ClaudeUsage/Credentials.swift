@@ -63,7 +63,7 @@ enum Credentials {
         lastRead = Date()
 
         // Vlastní token má přednost, jeho čtení nikdy nevyvolá dialog.
-        if let own = ownToken() {
+        if !ownTokenRejected, let own = ownToken() {
             return store((own, nil), source: "vlastní token")
         }
         if let data = try? Data(contentsOf: fileURL), let parsed = parse(data) {
@@ -115,7 +115,18 @@ enum Credentials {
 
     // MARK: - Vlastní token
 
-    static var hasOwnToken: Bool { ownToken() != nil }
+    /// Endpoint vlastní token odmítl. Dokud ho uživatel nevymění, nemá smysl ho zkoušet.
+    private(set) static var ownTokenRejected = false
+
+    static func markOwnTokenRejected() {
+        lock.lock()
+        ownTokenRejected = true
+        cached = nil
+        cachedExpiry = nil
+        lock.unlock()
+    }
+
+    static var hasOwnToken: Bool { !ownTokenRejected && ownToken() != nil }
 
     private static func ownToken() -> String? {
         let query: [String: Any] = [
@@ -137,6 +148,7 @@ enum Credentials {
     @discardableResult
     static func saveOwnToken(_ token: String) -> OSStatus {
         lock.lock()
+        ownTokenRejected = false
         cached = nil
         cachedExpiry = nil
         lastRead = nil
@@ -166,6 +178,7 @@ enum Credentials {
     @discardableResult
     static func deleteOwnToken() -> OSStatus {
         lock.lock()
+        ownTokenRejected = false
         cached = nil
         cachedExpiry = nil
         lastRead = nil

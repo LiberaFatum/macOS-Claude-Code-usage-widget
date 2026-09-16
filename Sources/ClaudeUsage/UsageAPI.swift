@@ -7,6 +7,7 @@ enum UsageAPI {
 
     enum Failure: Error, CustomStringConvertible {
         case noToken
+        case ownTokenRejected
         case expiredToken(Date)
         case unauthorized
         case rateLimited(TimeInterval?)
@@ -17,6 +18,7 @@ enum UsageAPI {
         var description: String {
             switch self {
             case .noToken: return "token nenalezen"
+            case .ownTokenRejected: return "vlastní token endpoint odmítl, smaž ho v Nastavení"
             case .expiredToken: return "token vypršel, obnoví ho spuštění Claude Code"
             case .unauthorized: return "token odmítnut, obnoví ho spuštění Claude Code"
             case .rateLimited: return "endpoint omezuje četnost dotazů"
@@ -33,6 +35,7 @@ enum UsageAPI {
             case .noToken: return 3600
             // Token si obnovuje jen Claude Code, dřív než za půl hodiny nemá smysl zkoušet.
             case .expiredToken, .unauthorized: return 1800
+            case .ownTokenRejected: return 86400
             default: return 300
             }
         }
@@ -78,12 +81,24 @@ enum UsageAPI {
                 }
             }
             // Loguje se jen to, co nevyšlo, ať soubor nebobtná řádkem za minutu.
+            // U odmítnutí se přidá i tělo odpovědi, jinak se důvod jen hádá.
             if status != 200 {
-                NSLog("ClaudeUsage: /api/oauth/usage -> HTTP %d (%@)", status, Credentials.lastSource)
+                var detail = ""
+                if let data, !data.isEmpty, let body = String(data: data, encoding: .utf8) {
+                    detail = " " + body.prefix(300)
+                }
+                NSLog("ClaudeUsage: /api/oauth/usage -> HTTP %d (%@)%@", status, Credentials.lastSource, detail)
             }
             if status == 429 {
                 let retryAfter = (http?.value(forHTTPHeaderField: "Retry-After")).flatMap(TimeInterval.init)
                 completion(.failure(.rateLimited(retryAfter)))
+                return
+            }
+            if status == 403, Credentials.lastSource == "vlastní token" {
+                // Dlouhodobý token z "claude setup-token" tenhle endpoint nebere.
+                // Opakovat ho nemá smysl, uživatel ho musí vyměnit nebo smazat.
+                Credentials.markOwnTokenRejected()
+                completion(.failure(.ownTokenRejected))
                 return
             }
             if status == 401 || status == 403 {
